@@ -9,7 +9,8 @@
     "start": "NODE_ENV=production tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cron": "tsx cron-runner.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
