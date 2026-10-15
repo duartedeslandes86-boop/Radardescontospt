@@ -49,6 +49,7 @@ jobs:
           git config user.name "radar-bot"
           git config user.email "bot@radardescontos.pt"
           git add sent_deals.json daily_deals.json || true
+          git add price_history.json || true
           if git diff --staged --quiet; then
             echo "Sem alterações ao estado."
             exit 0
