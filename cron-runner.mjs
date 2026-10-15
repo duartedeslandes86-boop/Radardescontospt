@@ -74,8 +74,19 @@ function readJson(file, fallback) {
   return fallback;
 }
 
-let sent = readJson(DB_FILE, []);
-if (!Array.isArray(sent)) sent = [];
+// Registos guardam a data (ASIN → "AAAA-MM-DD") e são apagados ao fim de RETENTION_DAYS
+const RETENTION_DAYS = 35;
+function toDatedMap(v) {
+  if (Array.isArray(v)) return Object.fromEntries(v.filter(a => typeof a === "string").map(a => [a, todayStr])); // formato antigo
+  return v && typeof v === "object" ? v : {};
+}
+function pruneDated(map) {
+  for (const [k, d] of Object.entries(map)) if (daysBetween(d, todayStr) > RETENTION_DAYS) delete map[k];
+  return map;
+}
+
+let sent = toDatedMap(readJson(DB_FILE, {}));
+const wasSent = asin => Object.prototype.hasOwnProperty.call(sent, asin);
 
 let dailyData = readJson(DAILY_FILE, null);
 if (!dailyData || !Array.isArray(dailyData.deals)) dailyData = { date: "", lastSummaryDate: "", deals: [] };
@@ -244,6 +255,7 @@ function cleanAndTranslateTitle(title = "") {
 let history = readJson(HISTORY_FILE, {});
 if (!history || typeof history !== "object" || Array.isArray(history)) history = {};
 if (!history._meta) history._meta = { nextCategory: 0 };
+history._meta.featured = pruneDated(toDatedMap(history._meta.featured)); // produtos já mostrados nas grelhas
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -323,7 +335,7 @@ function referencePrice(asin) {
 function pruneHistory() {
   for (const [asin, h] of Object.entries(history)) {
     if (asin === "_meta") continue;
-    for (const d of Object.keys(h.p)) if (daysBetween(d, todayStr) > HISTORY_DAYS + 1) delete h.p[d];
+    for (const d of Object.keys(h.p)) if (daysBetween(d, todayStr) > RETENTION_DAYS) delete h.p[d];
     if (!Object.keys(h.p).length) delete history[asin];
   }
   const asins = Object.keys(history).filter(a => a !== "_meta");
@@ -484,9 +496,9 @@ const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣
 
 // Escolhe produtos alternando categorias (pela ordem do ranking)
 function pickFeatured() {
-  const featured = history._meta.featured || [];
+  const featured = history._meta.featured;
   const ok = lastSeenItems.filter(it =>
-    !featured.includes(it.asin) && !sent.includes(it.asin) &&
+    !(it.asin in featured) && !wasSent(it.asin) &&
     it.price >= FEATURED_MIN_PRICE && it.imgUrl &&
     (!it.rating || it.rating >= 4.2) &&
     !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
@@ -547,7 +559,7 @@ async function publishFeaturedIfDue() {
     ok = (await telegram("sendMediaGroup", { media })).ok;
   }
   if (ok) {
-    history._meta.featured = [...(history._meta.featured || []), ...rows.map(r => r.asin)].slice(-600);
+    for (const r of rows) history._meta.featured[r.asin] = todayStr;
     history._meta.lastFeaturedAt = new Date().toISOString();
     console.log(`Grelha publicada: ${rows.map(r => `${r.asin} ${r.priceLabel}`).join(" | ")}`);
   }
@@ -568,7 +580,7 @@ async function run() {
     const asin = String(c.asin || "").toUpperCase();
     if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
     if (isBlockedSource(c.imgUrl, c.url)) { stats.bloqueada++; continue; }
-    if (sent.includes(asin)) { stats.repetido++; continue; }
+    if (wasSent(asin)) { stats.repetido++; continue; }
     if (c.available === false) { stats.semStock++; continue; }
     if ((c.condition && !/^(new|nuevo|novo)$/i.test(c.condition)) || isUsedOrRefurbished(c.title)) { stats.usado++; continue; }
 
@@ -579,7 +591,7 @@ async function run() {
     const affUrl = await publishDeal(asin, title, prices, c.imgUrl || null);
     if (affUrl) {
       console.log(`Publicado: ${asin} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
-      sent.push(asin);
+      sent[asin] = todayStr;
       published++;
       dailyData.deals.push({ asin, title, ...prices, affUrl, imgUrl: c.imgUrl || null });
     }
@@ -604,7 +616,7 @@ try {
   // Remove do histórico do dia qualquer entrada de fontes bloqueadas
   dailyData.deals = dailyData.deals.filter(d => !isBlockedSource(d.affUrl, d.imgUrl));
   if (!DRY_RUN || process.env.SAVE_STATE === "true") {
-    fs.writeFileSync(DB_FILE, JSON.stringify(sent.slice(-1000), null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify(pruneDated(sent), null, 2));
     fs.writeFileSync(DAILY_FILE, JSON.stringify(dailyData, null, 2));
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history));
   }
