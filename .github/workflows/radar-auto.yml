@@ -42,8 +42,14 @@ jobs:
           key: price-history-${{ github.run_id }}
           restore-keys: price-history-
 
+      # Biblioteca para montar a imagem em grelha (se falhar, o bot envia em álbum)
+      - name: Instalar biblioteca de imagens
+        continue-on-error: true
+        run: npm install --prefix "$RUNNER_TEMP/deps" sharp@0.34 --no-audit --no-fund
+
       - name: Executar Ciclo do Radar Autónomo
         env:
+          NODE_PATH: ${{ runner.temp }}/deps/node_modules
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
