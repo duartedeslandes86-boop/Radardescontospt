@@ -229,11 +229,13 @@ function parseBestsellers(html) {
       (card.match(/line-clamp[^"]*">([^<]{5,})</) || [])[1] ||
       (card.match(/<img[^>]+alt="([^"]{5,})"/) || [])[1];
     const img = (card.match(/<img[^>]+src="(https:\/\/[^"]+)"/) || [])[1];
+    const rating = parseEuro((card.match(/aria-label="([0-9][.,][0-9]) de 5/) || [])[1]);
     if (!price || !title) continue;
     items.push({
       asin,
       title: decodeEntities(title).split(" | ")[0].trim(),
       price: parseEuro(price),
+      rating,
       imgUrl: hiResAmazonImage(img)
     });
   }
@@ -291,6 +293,8 @@ function pruneHistory() {
   }
 }
 
+let lastSeenItems = []; // produtos lidos neste ciclo, pela ordem do ranking
+
 async function fetchCandidateDeals() {
   const start = history._meta.nextCategory % CATEGORIES.length;
   const cats = Array.from({ length: Math.min(CATEGORIES_PER_RUN, CATEGORIES.length) }, (_, i) => CATEGORIES[(start + i) % CATEGORIES.length]);
@@ -312,6 +316,7 @@ async function fetchCandidateDeals() {
     }
   }
 
+  lastSeenItems = [...seenNow.values()];
   const candidates = [];
   for (const it of seenNow.values()) {
     const ref = referencePrice(it.asin); // calcula ANTES de registar o preço de hoje
@@ -426,6 +431,55 @@ async function publishDeal(asin, title, prices, imgUrl) {
 }
 
 // ---------------------------------------------------------------------------
+// "Mais vendido" — quando não há descontos reais (ex.: primeiros dias sem histórico).
+// Só preço atual, nunca um ANTES inventado. Máx. 1 a cada 2h, entre as 9h e as 23h.
+// ---------------------------------------------------------------------------
+const FEATURED_EVERY_MIN = 120;
+const FEATURED_HOURS = [9, 23];
+
+async function publishFeaturedIfDue() {
+  if (lisbonHour < FEATURED_HOURS[0] || lisbonHour >= FEATURED_HOURS[1]) return;
+  const last = history._meta.lastFeaturedAt ? Date.parse(history._meta.lastFeaturedAt) : 0;
+  if (Date.now() - last < FEATURED_EVERY_MIN * 60000) return;
+
+  const featured = history._meta.featured || [];
+  const pick = lastSeenItems.find(it =>
+    !featured.includes(it.asin) && !sent.includes(it.asin) &&
+    (!it.rating || it.rating >= 4.2) &&
+    !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
+  );
+  if (!pick) return;
+
+  const title = cleanAndTranslateTitle(pick.title);
+  const price = formatEur(pick.price * VAT_ES_TO_PT);
+  const affUrl = `https://www.amazon.es/dp/${pick.asin}?tag=${TAG}`;
+  const caption =
+    `⭐ <b>MAIS VENDIDO NA AMAZON ES</b>\n\n` +
+    `📦 <b>${escapeHtml(title.length > 300 ? title.slice(0, 299) + "…" : title)}</b>\n\n` +
+    (pick.rating ? `⭐ ${String(pick.rating).replace(".", ",")} de 5\n` : "") +
+    `💶 <b>PREÇO ATUAL: ${price}</b>\n` +
+    `<i>Estamos a acompanhar o preço — avisamos aqui quando baixar.</i>\n\n` +
+    `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n` +
+    `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
+  const reply_markup = { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }]] };
+
+  let ok = false;
+  if (pick.imgUrl) {
+    try {
+      ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML", reply_markup })).ok;
+    } catch (e) {
+      console.error("sendPhoto erro:", e.message);
+    }
+  }
+  if (!ok) ok = (await telegram("sendMessage", { text: caption, parse_mode: "HTML", reply_markup })).ok;
+  if (ok) {
+    history._meta.featured = [...featured, pick.asin].slice(-500);
+    history._meta.lastFeaturedAt = new Date().toISOString();
+    console.log(`Mais vendido publicado: ${pick.asin} | ${title} | ${price}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ciclo principal
 // ---------------------------------------------------------------------------
 async function run() {
@@ -458,6 +512,7 @@ async function run() {
   }
 
   console.log(`Publicadas: ${published}. Ignoradas →`, JSON.stringify(stats));
+  if (published === 0) await publishFeaturedIfDue();
   await publishDailyTopIfDue();
 }
 
