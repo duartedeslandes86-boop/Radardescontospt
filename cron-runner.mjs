@@ -86,19 +86,29 @@ if (dailyData.date !== todayStr) {
 // ---------------------------------------------------------------------------
 // Telegram
 // ---------------------------------------------------------------------------
+let telegramOk = 0, telegramFail = 0; // para o workflow ficar vermelho se o Telegram recusar tudo
+
 async function telegram(method, payload) {
   if (DRY_RUN) {
     console.log(`\n[DRY_RUN] ${method}:\n${JSON.stringify(payload, null, 2)}\n`);
     return { ok: true };
   }
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, ...payload })
-  });
-  const data = await res.json();
-  if (!data.ok) console.error(`Telegram ${method} falhou: ${data.description}`);
-  return data;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, ...payload }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const data = await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status} sem JSON` }));
+    if (data.ok) telegramOk++;
+    else { telegramFail++; console.error(`Telegram ${method} falhou: ${data.description}`); }
+    return data;
+  } catch (e) {
+    telegramFail++;
+    console.error(`Telegram ${method} erro de rede: ${e.message}`);
+    return { ok: false, description: e.message };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +143,7 @@ function formatEur(n) {
 
 // Bloquear recondicionados, usados, caixa aberta, Amazon Warehouse, etc.
 function isUsedOrRefurbished(text = "") {
-  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const t = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return /\b(reaco|reacondicionad[oa]s?|recondicionad[oa]s?|segunda mano|caja abierta|caixa aberta|usad[oa]s?|warehouse|como nuevo|como novo|refurbished|renewed|seminuev[oa]s?)\b/.test(t);
 }
 
@@ -150,32 +160,36 @@ function computePrices(currentRaw, oldRaw, pricesIncludeEsVat = true) {
 
 // Título em PT-PT: tirar preços e limpar palavras espanholas que sobrem
 const TRANSLATIONS = [
-  [/Auriculares inal[aá]mbricos/gi, "Auscultadores sem fios"],
-  [/Auriculares/gi, "Auscultadores"],
-  [/Barra de Sonido/gi, "Barra de Som"],
-  [/Mascarilla/gi, "Máscara Capilar"],
-  [/Cabello Te[ñn]ido/gi, "Cabelo Pintado"],
-  [/Cabello/gi, "Cabelo"],
-  [/Champ[uú]/gi, "Champô"],
-  [/Crema de Noche/gi, "Creme de Noite"],
-  [/Crema de D[ií]a/gi, "Creme de Dia"],
-  [/Juego de/gi, "Conjunto de"],
-  [/en trozos/gi, "em pedaços"],
-  [/colores diferentes/gi, "cores diferentes"],
-  [/Env[ií]o gratis/gi, "Envio grátis"],
-  [/Rat[oó]n/gi, "Rato"],
-  [/Pulgadas/gi, "Polegadas"],
-  [/inal[aá]mbric[oa]s?/gi, "sem fios"],
-  [/Gel de Ba[ñn]o/gi, "Gel de Banho"],
-  [/Mu[ñn]ec([oa])/gi, "Bonec$1"],
-  [/Zapatillas/gi, "Sapatilhas"],
-  [/Calcetines/gi, "Meias"],
-  [/Cargador/gi, "Carregador"],
-  [/Altavoz/gi, "Coluna"],
-  [/Reloj/gi, "Relógio"],
-  [/Gafas/gi, "Óculos"],
-  [/Funda/gi, "Capa"],
-  [/Juguete/gi, "Brinquedo"],
+  // (?<![\p{L}]) / (?![\p{L}]) = só palavras inteiras, mesmo com acentos
+  [/(?<!\p{L})Auriculares inal[aá]mbricos(?!\p{L})/giu, "Auscultadores sem fios"],
+  [/(?<!\p{L})Auriculares(?!\p{L})/giu, "Auscultadores"],
+  [/(?<!\p{L})Barra de Sonido(?!\p{L})/giu, "Barra de Som"],
+  [/(?<!\p{L})Mascarilla(?!\p{L})/giu, "Máscara Capilar"],
+  [/(?<!\p{L})Cabello Te[ñn]ido(?!\p{L})/giu, "Cabelo Pintado"],
+  [/(?<!\p{L})Cabello(?!\p{L})/giu, "Cabelo"],
+  [/(?<!\p{L})Champ[uú](?!\p{L})/giu, "Champô"],
+  [/(?<!\p{L})Crema de Noche(?!\p{L})/giu, "Creme de Noite"],
+  [/(?<!\p{L})Crema de D[ií]a(?!\p{L})/giu, "Creme de Dia"],
+  [/(?<!\p{L})Juego de(?!\p{L})/giu, "Conjunto de"],
+  [/(?<!\p{L})en trozos(?!\p{L})/giu, "em pedaços"],
+  [/(?<!\p{L})colores diferentes(?!\p{L})/giu, "cores diferentes"],
+  [/(?<!\p{L})Env[ií]o gratis(?!\p{L})/giu, "Envio grátis"],
+  [/(?<!\p{L})Rat[oó]n(?!\p{L})/giu, "Rato"],
+  [/(?<!\p{L})Pulgadas(?!\p{L})/giu, "Polegadas"],
+  [/(?<!\p{L})inal[aá]mbric[oa]s?(?!\p{L})/giu, "sem fios"],
+  [/(?<!\p{L})Gel de Ba[ñn]o(?!\p{L})/giu, "Gel de Banho"],
+  [/(?<!\p{L})Mu[ñn]ec([oa]s?)(?!\p{L})/giu, "Bonec$1"],
+  [/(?<!\p{L})Zapatillas(?!\p{L})/giu, "Sapatilhas"],
+  [/(?<!\p{L})Calcetines(?!\p{L})/giu, "Meias"],
+  [/(?<!\p{L})Cargador(?!\p{L})/giu, "Carregador"],
+  [/(?<!\p{L})Altavoz(?!\p{L})/giu, "Coluna"],
+  [/(?<!\p{L})Reloj(?!\p{L})/giu, "Relógio"],
+  [/(?<!\p{L})Gafas(?!\p{L})/giu, "Óculos"],
+  [/(?<!\p{L})Funda(?!\p{L})/giu, "Capa"],
+  [/(?<!\p{L})Juguete(?!\p{L})/giu, "Brinquedo"],
+  [/(?<!\p{L})C[aá]mara(?!\p{L})/giu, "Câmara"],
+  [/(?<!\p{L})Vigilancia(?!\p{L})/giu, "Vigilância"],
+  [/(?<!\p{L})Pilas(?!\p{L})/giu, "Pilhas"],
   [/\bHombre\b/gi, "Homem"],
   [/\bMujer\b/gi, "Mulher"],
   [/\bNi[ñn]os\b/gi, "Crianças"],
@@ -519,6 +533,10 @@ async function run() {
 let exitCode = 0;
 try {
   await run();
+  if (telegramFail > 0 && telegramOk === 0) {
+    console.error("ERRO: o Telegram recusou todos os envios deste ciclo (token ou canal errados?).");
+    exitCode = 1;
+  }
 } catch (e) {
   console.error("Erro:", e.message);
   exitCode = 1;

@@ -25,14 +25,22 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Obter código do repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: main
 
-      - name: Configurar Node.js 20
-        uses: actions/setup-node@v4
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
+
+      # Histórico de preços fica na cache do Actions (não enche o repositório)
+      - name: Recuperar histórico de preços
+        uses: actions/cache/restore@v5
+        with:
+          path: price_history.json
+          key: price-history-${{ github.run_id }}
+          restore-keys: price-history-
 
       - name: Executar Ciclo do Radar Autónomo
         env:
@@ -43,13 +51,19 @@ jobs:
           FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
         run: node cron-runner.mjs
 
+      - name: Guardar histórico de preços
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: price_history.json
+          key: price-history-${{ github.run_id }}
+
       - name: Guardar histórico anti-duplicação no repositório
         if: always()
         run: |
           git config user.name "radar-bot"
           git config user.email "bot@radardescontos.pt"
           git add sent_deals.json daily_deals.json || true
-          git add price_history.json || true
           if git diff --staged --quiet; then
             echo "Sem alterações ao estado."
             exit 0
