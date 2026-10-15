@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "cron": "tsx cron-runner.ts"
+    "cron": "node cron-runner.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

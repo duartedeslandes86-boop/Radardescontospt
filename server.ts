@@ -11,7 +11,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 3000;
 
 // Configurações do Telegram e Amazon
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8933540772:AAFP2_IKfYKLADfcv5rn7Miq_MuFnPEy1p4';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '-1003846917730';
 const AMAZON_TAG = 'radardescontospt-21';
 
@@ -263,122 +263,15 @@ function buildAmazonAffiliateUrl(rawUrl: string): {
   return { affiliateUrl: cleanUrl, asin: null, isAmazon: false };
 }
 
-// Cache em memória de threads do Chollometro já resolvidos para Amazon
-const resolvedThreadsCache = new Map<
-  string,
-  {
-    affiliateUrl: string;
-    asin: string | null;
-    isAmazon: boolean;
-  }
->();
+// Fontes bloqueadas: nunca usar nem aceitar links destes sites
+const BLOCKED_SOURCES = /(^|\.|\/\/)(chollometro\.com|pepper\.com)/i;
+function isBlockedSource(url: string): boolean {
+  return BLOCKED_SOURCES.test(url || '');
+}
 
-// Resolução obrigatória de links chollometro.com -> destino real Amazon.es
-async function resolveChollometroToAmazon(rawUrl: string): Promise<{
-  affiliateUrl: string;
-  asin: string | null;
-  isAmazon: boolean;
-}> {
-  if (!rawUrl || typeof rawUrl !== 'string') {
-    return { affiliateUrl: '', asin: null, isAmazon: false };
-  }
-
-  // 1. Se já contiver ASIN direto
-  const directAsin = extractAsin(rawUrl);
-  if (directAsin) {
-    return {
-      affiliateUrl: `https://www.amazon.es/dp/${directAsin}?tag=${AMAZON_TAG}`,
-      asin: directAsin,
-      isAmazon: true,
-    };
-  }
-
-  // 2. Se for link do Chollometro, extrair threadId e resolver redirecionamento
-  if (rawUrl.includes('chollometro.com')) {
-    const threadMatch = rawUrl.match(/-(\d+)(?:[/?#]|$)/) || rawUrl.match(/\/thread\/(\d+)/);
-    const threadId = threadMatch ? threadMatch[1] : null;
-
-    if (threadId) {
-      if (resolvedThreadsCache.has(threadId)) {
-        return resolvedThreadsCache.get(threadId)!;
-      }
-
-      try {
-        const visitUrl = `https://www.chollometro.com/visit/thread/${threadId}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-        const res = await fetch(visitUrl, {
-          method: 'GET',
-          redirect: 'manual',
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-            Referer: rawUrl,
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const location = res.headers.get('location') || '';
-        const bodyText = res.status !== 302 ? await res.text() : '';
-        const combined = `${location} ${bodyText}`;
-
-        // Extrair parâmetro ?url= codificado dentro do redirecionamento
-        let decodedUrl = '';
-        const urlMatch = combined.match(/[?&]url=([^&"'\s<>]+)/i);
-        if (urlMatch) {
-          try {
-            decodedUrl = decodeURIComponent(urlMatch[1]);
-          } catch {}
-        }
-
-        const candidateTarget = decodedUrl || location || combined;
-        const resolvedAsin = extractAsin(candidateTarget);
-
-        if (resolvedAsin) {
-          const result = {
-            affiliateUrl: `https://www.amazon.es/dp/${resolvedAsin}?tag=${AMAZON_TAG}`,
-            asin: resolvedAsin,
-            isAmazon: true,
-          };
-          resolvedThreadsCache.set(threadId, result);
-          return result;
-        }
-
-        // Verificar se é link Amazon mesmo sem padrão de ASIN
-        const amznMatch = candidateTarget.match(/https?:\/\/(?:www\.)?amazon\.(?:es|com|de|fr|it|co\.uk)[^\s"'<>]+/i);
-        if (amznMatch) {
-          const amznUrl = amznMatch[0];
-          const aAsin = extractAsin(amznUrl);
-          if (aAsin) {
-            const result = {
-              affiliateUrl: `https://www.amazon.es/dp/${aAsin}?tag=${AMAZON_TAG}`,
-              asin: aAsin,
-              isAmazon: true,
-            };
-            resolvedThreadsCache.set(threadId, result);
-            return result;
-          }
-          const result = {
-            affiliateUrl: `${amznUrl.split('?')[0]}?tag=${AMAZON_TAG}`,
-            asin: null,
-            isAmazon: true,
-          };
-          resolvedThreadsCache.set(threadId, result);
-          return result;
-        }
-      } catch (err: any) {
-        // Ignora silenciosamente timeouts de rede sem poluir a consola
-        if (err?.name !== 'AbortError') {
-          console.warn(`Tentativa de resolução do thread ${threadId} do Chollometro falhou:`, err?.message || err);
-        }
-      }
-    }
-  }
-
-  // 3. Fallback normal
+// Só aceita links diretos da Amazon (com ou sem ASIN)
+function resolveAmazonLink(rawUrl: string): { affiliateUrl: string; asin: string | null; isAmazon: boolean } {
+  if (isBlockedSource(rawUrl)) return { affiliateUrl: '', asin: null, isAmazon: false };
   return buildAmazonAffiliateUrl(rawUrl);
 }
 
@@ -704,279 +597,11 @@ export interface DealItem {
   merchant?: string;
 }
 
-// Pipeline de Obtenção com Bypass de Cloudflare
-async function fetchRssContent(): Promise<{ content: string; isJson: boolean; source: string } | null> {
-  const defaultHeaders: Record<string, string> = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-    Accept: 'application/rss+xml, application/xml, text/xml',
-  };
-
-  const jsonHeaders: Record<string, string> = {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-    Accept: 'application/json',
-  };
-
-  const sources: Array<{ url: string; isJson: boolean; headers: Record<string, string> }> = [
-    { url: 'https://www.chollometro.com/rss', isJson: false, headers: defaultHeaders },
-    { url: 'https://www.chollometro.com/rss/todo', isJson: false, headers: defaultHeaders },
-    {
-      url: `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.chollometro.com/rss')}`,
-      isJson: false,
-      headers: defaultHeaders,
-    },
-    {
-      url: `https://api.allorigins.win/raw?url=${encodeURIComponent('https://www.chollometro.com/rss/todo')}`,
-      isJson: false,
-      headers: defaultHeaders,
-    },
-    {
-      url: `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://www.chollometro.com/rss')}`,
-      isJson: true,
-      headers: jsonHeaders,
-    },
-    {
-      url: `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://www.chollometro.com/rss/todo')}`,
-      isJson: true,
-      headers: jsonHeaders,
-    },
-    { url: 'https://www.chollometro.com/rss/categoria/electronica', isJson: false, headers: defaultHeaders },
-  ];
-
-  for (const src of sources) {
-    try {
-      const res = await fetch(src.url, {
-        headers: src.headers,
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (!res.ok) continue;
-
-      const text = await res.text();
-      if (src.isJson) {
-        try {
-          const json = JSON.parse(text);
-          if (json.status === 'ok' && Array.isArray(json.items) && json.items.length > 0) {
-            return { content: text, isJson: true, source: src.url };
-          }
-        } catch {}
-      } else {
-        if (text.includes('<rss') || text.includes('<item') || text.includes('<channel')) {
-          return { content: text, isJson: false, source: src.url };
-        }
-      }
-    } catch {}
-  }
-
-  return null;
-}
-
-// Extração de preço exato da descrição HTML ou tags Pepper
-function extractExactPrices(
-  title: string,
-  descHtml: string
-): { newPrice: number | null; oldPrice: number | null } {
-  let newPrice: number | null = null;
-  let oldPrice: number | null = null;
-
-  // 1. O Chollometro coloca quase sempre: <strong>XX,XX€ - Loja</strong>
-  const strongMatch = descHtml.match(/<strong>\s*(\d+(?:[.,]\d{1,2})?)\s*€/i);
-  if (strongMatch) {
-    newPrice = parsePrice(strongMatch[1]);
-  }
-
-  // 2. Extração de preço antigo da descrição
-  const oldMatch =
-    descHtml.match(/<del[^>]*>\s*(\d+(?:[.,]\d{1,2})?)\s*€/i) ||
-    descHtml.match(/<strike[^>]*>\s*(\d+(?:[.,]\d{1,2})?)\s*€/i) ||
-    descHtml.match(/(?:antes|pvp|antigo|original|t[ií]pico)[:\s]*(\d+(?:[.,]\d{1,2})?)\s*€/i);
-
-  if (oldMatch) {
-    oldPrice = parsePrice(oldMatch[1]);
-  }
-
-  // 3. Se newPrice ainda não foi extraído, pesquisar no título
-  if (newPrice === null) {
-    const priceMatches = [...title.matchAll(/(\d+(?:[.,]\d{1,2})?)\s*€/g)];
-    if (priceMatches.length >= 2) {
-      const p1 = parsePrice(priceMatches[0][1]);
-      const p2 = parsePrice(priceMatches[1][1]);
-      if (p1 && p2) {
-        newPrice = Math.min(p1, p2);
-        if (!oldPrice) oldPrice = Math.max(p1, p2);
-      }
-    } else if (priceMatches.length === 1) {
-      newPrice = parsePrice(priceMatches[0][1]);
-    }
-  }
-
-  // Se grátis
-  if (newPrice === null && /gratis|gratuito|free/i.test(title)) {
-    newPrice = 0;
-  }
-
-  return { newPrice, oldPrice };
-}
-
-// Processador 100% LIVE de Ofertas:
-// - Traduz espanhol para português europeu
-// - Extrai preços numéricos exatos
-// - Resolve OBRIGATORIAMENTE URLs chollometro.com para links diretos Amazon.es
-// - Filtro Estrito: inclui APENAS ofertas com link direto Amazon.es / ASIN válido (NUNCA envia links chollometro.com)
-async function scanDealsFromRss(): Promise<DealItem[]> {
-  const deals: DealItem[] = [];
-  const fetched = await fetchRssContent();
-
-  if (!fetched) {
-    console.warn('Nenhuma fonte de feed RSS respondeu. Retornando array vazio [] sem dados fictícios.');
-    return [];
-  }
-
-  try {
-    interface RawItem {
-      title: string;
-      link: string;
-      description: string;
-      pubDate: string;
-      thumbnail?: string | null;
-      guid?: string;
-      merchantName?: string;
-    }
-
-    const rawItems: RawItem[] = [];
-
-    if (fetched.isJson) {
-      const json = JSON.parse(fetched.content);
-      const items = json.items || [];
-      for (const item of items) {
-        rawItems.push({
-          title: typeof item.title === 'string' ? item.title : '',
-          link: typeof item.link === 'string' ? item.link : '',
-          description: typeof item.description === 'string' ? item.description : '',
-          pubDate: typeof item.pubDate === 'string' ? item.pubDate : new Date().toUTCString(),
-          thumbnail: typeof item.thumbnail === 'string' ? item.thumbnail : null,
-          guid: item.guid,
-          merchantName: '',
-        });
-      }
-    } else {
-      const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-      });
-      const parsed = parser.parse(fetched.content);
-      const items = parsed?.rss?.channel?.item;
-      const itemList = Array.isArray(items) ? items : items ? [items] : [];
-
-      for (const item of itemList) {
-        rawItems.push({
-          title: typeof item.title === 'string' ? item.title : '',
-          link: typeof item.link === 'string' ? item.link : '',
-          description: typeof item.description === 'string' ? item.description : '',
-          pubDate: typeof item.pubDate === 'string' ? item.pubDate : new Date().toUTCString(),
-          guid: item.guid?.['#text'] || item.guid,
-          merchantName: item['pepper:merchant']?.['@_name'] || '',
-        });
-      }
-    }
-
-    // Filtrar candidatos da Amazon antes de efetuar pedidos de rede
-    const isAmazonCandidate = (item: RawItem): boolean => {
-      const m = (item.merchantName || '').toLowerCase();
-      if (m.includes('amazon')) return true;
-      const d = (item.description || '').toLowerCase();
-      if (d.includes('amazon') || d.includes('amzn.to')) return true;
-      if (item.link.toLowerCase().includes('amazon')) return true;
-      return false;
-    };
-
-    const amazonCandidates = rawItems.filter(isAmazonCandidate);
-
-    // Processar em lotes controlados de 3 para não congestionar a ligação
-    for (let i = 0; i < amazonCandidates.length; i += 3) {
-      const batch = amazonCandidates.slice(i, i + 3);
-      const batchResults = await Promise.all(
-        batch.map(async (rawItem) => {
-          const rawTitle = rawItem.title;
-          const rawLink = rawItem.link;
-          const rawDesc = rawItem.description;
-          const pubDate = rawItem.pubDate;
-
-          // 1. Extração exata dos preços (novo e antigo)
-          const { newPrice, oldPrice } = extractExactPrices(rawTitle, rawDesc);
-
-          // 2. Tradução de Espanhol para Português Europeu
-          const translatedTitle = translateSpanishToPortuguese(rawTitle);
-
-          // 3. Extração da Imagem do produto
-          const imgMatch =
-            rawItem.thumbnail ||
-            rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ||
-            rawDesc.match(/src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif))["']/i)?.[1] ||
-            null;
-
-          // 4. Resolução do link do Chollometro para Amazon.es com tag
-          const resolved = await resolveChollometroToAmazon(rawLink);
-
-          // FILTRO ESTRITO: Apenas aceita produtos resolvidos para Amazon com ASIN
-          if (
-            !resolved.isAmazon ||
-            !resolved.asin ||
-            resolved.affiliateUrl.includes('chollometro.com')
-          ) {
-            return null;
-          }
-
-          const dealId = resolved.asin;
-
-          let discountPercent: number | null = null;
-          if (oldPrice && newPrice && oldPrice > newPrice) {
-            discountPercent = Math.round(((oldPrice - newPrice) / oldPrice) * 100);
-          }
-
-          // 5. Verificação estrita anti-duplicação (ASIN, URL Limpo, Slug)
-          const check = isDealAlreadySent({
-            id: dealId,
-            asin: resolved.asin,
-            originalLink: resolved.affiliateUrl,
-            affiliateUrl: resolved.affiliateUrl,
-            title: translatedTitle,
-          });
-
-          const dealItem: DealItem = {
-            id: dealId,
-            title: translatedTitle,
-            descriptionHtml: rawDesc,
-            originalLink: resolved.affiliateUrl,
-            affiliateUrl: resolved.affiliateUrl,
-            asin: resolved.asin,
-            isAmazon: true,
-            newPrice: newPrice !== null ? newPrice : 0,
-            oldPrice: oldPrice,
-            discountPercent: discountPercent,
-            imageUrl: imgMatch,
-            pubDate: pubDate,
-            alreadySent: check.alreadySent,
-            merchant: 'Amazon.es',
-          };
-
-          return dealItem;
-        })
-      );
-
-      for (const r of batchResults) {
-        if (r !== null) {
-          deals.push(r);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Erro ao processar conteúdo das ofertas ao vivo:', err);
-    return [];
-  }
-
-  return deals;
+// Fonte de ofertas: à espera da API oficial da Amazon (Creators API / PA-API).
+// Enquanto não estiver configurada, não há varrimento automático.
+async function scanDeals(): Promise<DealItem[]> {
+  console.warn('Sem fonte de ofertas configurada (à espera da API oficial da Amazon).');
+  return [];
 }
 
 // Estado do Piloto Automático (Auto-Pilot Worker)
@@ -1023,11 +648,11 @@ async function runAutopilotCycle(): Promise<void> {
   addAutopilotLog('Iniciando ciclo automático de varrimento do radar...', 'info');
 
   try {
-    const scannedDeals = await scanDealsFromRss();
+    const scannedDeals = await scanDeals();
 
-    // Filtrar estritamente apenas ofertas novas (que NÃO contenham links chollometro.com e não repetidas)
+    // Filtrar estritamente apenas ofertas novas (só Amazon, nunca fontes bloqueadas, não repetidas)
     const eligibleDeals = scannedDeals.filter((d) => {
-      if (d.affiliateUrl.includes('chollometro.com') || !d.asin) return false;
+      if (isBlockedSource(d.affiliateUrl) || isBlockedSource(d.originalLink) || !d.asin) return false;
       const check = isDealAlreadySent({
         id: d.id,
         asin: d.asin,
@@ -1129,7 +754,7 @@ async function startServer() {
   // 1. Endpoint: Obter Ofertas do Radar (Apenas Amazon.es com ASIN real e tradução PT)
   app.get('/api/scan', async (_req, res) => {
     try {
-      const deals = await scanDealsFromRss();
+      const deals = await scanDeals();
       const refreshed = deals.map((d) => {
         const check = isDealAlreadySent({
           id: d.id,
@@ -1151,7 +776,7 @@ async function startServer() {
     }
   });
 
-  // 2. Endpoint: Publicar Oferta no Telegram (Garante link direto da Amazon e nunca chollometro)
+  // 2. Endpoint: Publicar Oferta no Telegram (só links diretos da Amazon)
   app.post('/api/publish', async (req, res) => {
     try {
       const { id, title, oldPrice, newPrice, url, imageUrl, dispatchType } = req.body;
@@ -1166,8 +791,11 @@ async function startServer() {
       const parsedOld = parsePrice(oldPrice);
       const parsedNew = parsePrice(newPrice);
 
-      // Resolução obrigatória se vier URL do chollometro
-      const resolved = await resolveChollometroToAmazon(url);
+      // Só links diretos da Amazon; fontes bloqueadas são recusadas
+      const resolved = resolveAmazonLink(url);
+      if (!resolved.isAmazon) {
+        return res.status(400).json({ success: false, error: 'Só são aceites links diretos da Amazon.' });
+      }
       const affiliateUrl = resolved.affiliateUrl;
       const asin = resolved.asin;
       const dealId = id || asin || Buffer.from(affiliateUrl).toString('base64').substring(0, 16);
@@ -1230,13 +858,13 @@ async function startServer() {
     }
   });
 
-  // 3. Endpoint: Conversor de Link com Resolução Inteligente do Chollometro para Amazon
+  // 3. Endpoint: Conversor de Link Amazon → link de afiliado
   app.post('/api/convert', async (req, res) => {
     const { url } = req.body;
     if (!url) {
       return res.status(400).json({ success: false, error: 'URL não fornecido.' });
     }
-    const result = await resolveChollometroToAmazon(url);
+    const result = resolveAmazonLink(url);
     res.json({
       success: true,
       originalUrl: url,

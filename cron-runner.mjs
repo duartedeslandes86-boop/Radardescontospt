@@ -1,326 +1,341 @@
+// Radar Descontos & Tech PT — motor automático (GitHub Actions, a cada 20 min)
+// Publica no Telegram ofertas da Amazon ES: só produtos novos, com preço ANTES e AGORA
+// ajustados ao IVA português. Às 21h (Lisboa) envia o Top 5 do dia em álbum.
+//
+// Fonte das ofertas: API oficial da Amazon (Creators API / PA-API) — por ligar.
+// Enquanto a API não estiver configurada, o bot não publica ofertas novas.
+// Fontes de terceiros (Chollometro e afins) estão bloqueadas.
 import fs from "fs";
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8933540772:AAFP2_IKfYKLADfcv5rn7Miq_MuFnPEy1p4";
+// ---------------------------------------------------------------------------
+// Configuração — o token do bot vem SÓ do Secret do GitHub (nunca escrito no código)
+// ---------------------------------------------------------------------------
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1003846917730";
 const TAG = process.env.AMAZON_PARTNER_TAG || "radardescontospt-21";
+// Awin: preparado para quando a conta for aprovada (ainda não é usado)
+const AWIN_PUBLISHER_ID = process.env.AWIN_PUBLISHER_ID || "3124493";
+const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
+const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
+
+const MAX_POSTS_PER_RUN = Number(process.env.MAX_POSTS_PER_RUN || 2);
+const MIN_DISCOUNT_PCT = 15;
+const VAT_ES_TO_PT = 1.23 / 1.21;
+const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
 const DAILY_FILE = "daily_deals.json";
 
-let sent = [];
-if (fs.existsSync(DB_FILE)) {
-  try {
-    sent = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-    if (!Array.isArray(sent)) sent = [];
-  } catch (e) {
-    sent = [];
-  }
+// Fontes bloqueadas: nenhum link, imagem ou oferta destes sites é aceite
+const BLOCKED_SOURCES = /(^|\.|\/\/)(chollometro\.com|pepper\.com)/i;
+function isBlockedSource(...urls) {
+  return urls.some(u => BLOCKED_SOURCES.test(u || ""));
 }
 
-let dailyData = { date: "", lastSummaryDate: "", deals: [] };
-if (fs.existsSync(DAILY_FILE)) {
-  try {
-    dailyData = JSON.parse(fs.readFileSync(DAILY_FILE, "utf8"));
-    if (!dailyData || !Array.isArray(dailyData.deals)) {
-      dailyData = { date: "", lastSummaryDate: "", deals: [] };
-    }
-  } catch (e) {
-    dailyData = { date: "", lastSummaryDate: "", deals: [] };
-  }
+if (!BOT_TOKEN && !DRY_RUN) {
+  console.error("ERRO: falta o Secret TELEGRAM_BOT_TOKEN no GitHub (Settings → Secrets and variables → Actions).");
+  process.exit(1);
 }
 
-const todayStr = new Date().toISOString().slice(0, 10);
+// ---------------------------------------------------------------------------
+// Datas em hora de Lisboa (trata sozinho da mudança de hora verão/inverno)
+// ---------------------------------------------------------------------------
+function lisbonNow() {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Lisbon", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23"
+    }).formatToParts(new Date()).map(p => [p.type, p.value])
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+const { date: todayStr, hour: lisbonHour } = lisbonNow();
+
+// ---------------------------------------------------------------------------
+// Estado (ficheiros JSON guardados no repositório)
+// ---------------------------------------------------------------------------
+function readJson(file, fallback) {
+  try {
+    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    console.error(`Aviso: ${file} inválido, a recomeçar (${e.message})`);
+  }
+  return fallback;
+}
+
+let sent = readJson(DB_FILE, []);
+if (!Array.isArray(sent)) sent = [];
+
+let dailyData = readJson(DAILY_FILE, null);
+if (!dailyData || !Array.isArray(dailyData.deals)) dailyData = { date: "", lastSummaryDate: "", deals: [] };
 if (dailyData.date !== todayStr) {
   dailyData.date = todayStr;
   dailyData.deals = [];
 }
 
-async function fetchWithTimeout(url, timeoutMs = 6500) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept-Language": "pt-PT,pt;q=0.9,es;q=0.8"
-      },
-      redirect: "follow",
-      signal: controller.signal
-    });
-    const text = await res.text();
-    return { text, finalUrl: res.url };
-  } finally {
-    clearTimeout(id);
+// ---------------------------------------------------------------------------
+// Telegram
+// ---------------------------------------------------------------------------
+async function telegram(method, payload) {
+  if (DRY_RUN) {
+    console.log(`\n[DRY_RUN] ${method}:\n${JSON.stringify(payload, null, 2)}\n`);
+    return { ok: true };
   }
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHAT_ID, ...payload })
+  });
+  const data = await res.json();
+  if (!data.ok) console.error(`Telegram ${method} falhou: ${data.description}`);
+  return data;
 }
 
-function parseNum(str) {
-  if (!str) return 0;
-  return parseFloat(String(str).replace(",", "."));
+// ---------------------------------------------------------------------------
+// Utilitários de texto e preços
+// ---------------------------------------------------------------------------
+function decodeEntities(s = "") {
+  return s
+    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
 }
 
-function formatEur(num) {
-  return num.toFixed(2).replace(".", ",") + "€";
+function escapeHtml(s = "") {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function extractPrices(itemXml, rawTitle, desc, pageHtml = "") {
-  let currentVal = 0;
-  let oldVal = 0;
-
-  // 1. Preço atual da tag oficial <pepper:merchant price="XX.XX€">
-  const pepperMatch = itemXml.match(/price=["']\s*([0-9]+[.,]?[0-9]*)\s*€?\s*["']/i);
-  if (pepperMatch) {
-    const v = parseNum(pepperMatch[1]);
-    if (v > 0.5) currentVal = v;
-  }
-
-  // 2. Preços no Título e Descrição
-  const textToSearch = `${rawTitle} ${desc}`;
-  const priceMatches = [...textToSearch.matchAll(/([0-9]{1,4}(?:[.,][0-9]{1,2})?)\s*€/g)]
-    .map(m => parseNum(m[1]))
-    .filter(n => n > 0.5);
-
-  if (!currentVal && priceMatches.length > 0) {
-    currentVal = priceMatches[0];
-  }
-
-  for (const p of priceMatches) {
-    if (currentVal > 0 && p > currentVal * 1.05) {
-      oldVal = p;
-      break;
-    }
-  }
-
-  // 3. Preço Antes/Original no HTML (nextBestPrice / PVP / Antes)
-  if (pageHtml) {
-    if (!currentVal) {
-      const htmlPrice = pageHtml.match(/"price"\s*:\s*"?([0-9]{1,4}(?:[.,][0-9]{1,2})?)"?/i);
-      if (htmlPrice && parseNum(htmlPrice[1]) > 0.5) {
-        currentVal = parseNum(htmlPrice[1]);
-      }
-    }
-    if (!oldVal) {
-      const nextBest =
-        pageHtml.match(/"nextBestPrice"\s*:\s*"?([0-9]{1,4}(?:[.,][0-9]{1,2})?)"?/i) ||
-        pageHtml.match(/(?:PVP|Antes|habitual|original)[:\s]*([0-9]{1,4}(?:[.,][0-9]{1,2})?)\s*€/i);
-      if (nextBest) {
-        const candidate = parseNum(nextBest[1]);
-        if (currentVal > 0 && candidate > currentVal * 1.05) {
-          oldVal = candidate;
-        }
-      }
-    }
-  }
-
-  return {
-    currentPrice: currentVal > 0.5 ? formatEur(currentVal) : null,
-    oldPrice: oldVal > currentVal ? formatEur(oldVal) : null,
-    discountPct: oldVal > currentVal ? Math.round(((oldVal - currentVal) / oldVal) * 100) : 0
-  };
+// Aceita "61,15", "1.299,99", "1.299", "299.95", 299.95
+function parseEuro(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return v;
+  let s = String(v).replace(/[€\s]/g, "");
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function cleanAndTranslateTitle(title) {
-  return title
-    .replace(/\s*[-–|]?\s*\d+[.,]?\d*\s*€/g, "")
-    .replace(/Envío gratis/gi, "Envio grátis")
-    .replace(/Auriculares inalámbricos/gi, "Auscultadores sem fios")
-    .replace(/Auriculares/gi, "Auscultadores")
-    .replace(/Barra de Sonido/gi, "Barra de Som")
-    .replace(/Mascarilla/gi, "Máscara Capilar")
-    .replace(/Cabello Teñido/gi, "Cabelo Pintado")
-    .replace(/Cabello/gi, "Cabelo")
-    .replace(/Champú/gi, "Champô")
-    .replace(/Crema de Noche/gi, "Creme de Noite")
-    .replace(/Ratón/gi, "Rato")
-    .replace(/Pulgadas/gi, "Polegadas")
-    .replace(/negro/gi, "preto")
-    .replace(/blanco/gi, "branco")
+function formatEur(n) {
+  return n.toFixed(2).replace(".", ",") + "€";
+}
+
+// Bloquear recondicionados, usados, caixa aberta, Amazon Warehouse, etc.
+function isUsedOrRefurbished(text = "") {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\b(reaco|reacondicionad[oa]s?|recondicionad[oa]s?|segunda mano|caja abierta|caixa aberta|usad[oa]s?|warehouse|como nuevo|como novo|refurbished|renewed|seminuev[oa]s?)\b/.test(t);
+}
+
+// Preço ANTES e AGORA, com ajuste IVA ES 21% → PT 23% (só se o preço vier com IVA espanhol)
+function computePrices(currentRaw, oldRaw, pricesIncludeEsVat = true) {
+  const factor = pricesIncludeEsVat ? VAT_ES_TO_PT : 1;
+  const cur = parseEuro(currentRaw) * factor;
+  const old = parseEuro(oldRaw) * factor;
+  if (cur <= 0.5 || old <= cur) return null;
+  const discountPct = Math.round(((old - cur) / old) * 100);
+  if (discountPct < MIN_DISCOUNT_PCT) return null;
+  return { currentPrice: formatEur(cur), oldPrice: formatEur(old), discountPct };
+}
+
+// Título em PT-PT: tirar preços e limpar palavras espanholas que sobrem
+const TRANSLATIONS = [
+  [/Auriculares inal[aá]mbricos/gi, "Auscultadores sem fios"],
+  [/Auriculares/gi, "Auscultadores"],
+  [/Barra de Sonido/gi, "Barra de Som"],
+  [/Mascarilla/gi, "Máscara Capilar"],
+  [/Cabello Te[ñn]ido/gi, "Cabelo Pintado"],
+  [/Cabello/gi, "Cabelo"],
+  [/Champ[uú]/gi, "Champô"],
+  [/Crema de Noche/gi, "Creme de Noite"],
+  [/Crema de D[ií]a/gi, "Creme de Dia"],
+  [/Juego de/gi, "Conjunto de"],
+  [/en trozos/gi, "em pedaços"],
+  [/colores diferentes/gi, "cores diferentes"],
+  [/Env[ií]o gratis/gi, "Envio grátis"],
+  [/Rat[oó]n/gi, "Rato"],
+  [/Pulgadas/gi, "Polegadas"],
+  [/inal[aá]mbric[oa]s?/gi, "sem fios"],
+  [/Gel de Ba[ñn]o/gi, "Gel de Banho"],
+  [/Mu[ñn]ec([oa])/gi, "Bonec$1"],
+  [/Zapatillas/gi, "Sapatilhas"],
+  [/Calcetines/gi, "Meias"],
+  [/Cargador/gi, "Carregador"],
+  [/Altavoz/gi, "Coluna"],
+  [/Reloj/gi, "Relógio"],
+  [/Gafas/gi, "Óculos"],
+  [/Funda/gi, "Capa"],
+  [/Juguete/gi, "Brinquedo"],
+  [/\bHombre\b/gi, "Homem"],
+  [/\bMujer\b/gi, "Mulher"],
+  [/\bNi[ñn]os\b/gi, "Crianças"],
+  [/\bcon\b/gi, "com"],
+  [/\by\b/g, "e"],
+  [/\bnegro\b/gi, "preto"],
+  [/\bnegra\b/gi, "preta"],
+  [/\bblanco\b/gi, "branco"],
+  [/\bblanca\b/gi, "branca"]
+];
+
+function cleanAndTranslateTitle(title = "") {
+  let t = decodeEntities(title)
+    .replace(/\s*[-–|]?\s*(?:por|a)?\s*[0-9]{1,3}(?:[.,][0-9]{1,3})*\s*€(?:\/\w+)?/gi, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
+  for (const [re, pt] of TRANSLATIONS) t = t.replace(re, pt);
+  return t.replace(/[\s,–-]+$/, "").trim();
+}
+
+// ---------------------------------------------------------------------------
+// FONTE DAS OFERTAS — API oficial da Amazon (por ligar)
+// Deve devolver: [{ asin, title, currentPrice, oldPrice, imgUrl, condition, available, pricesIncludeEsVat }]
+// ---------------------------------------------------------------------------
+async function fetchCandidateDeals() {
+  console.log("Sem fonte de ofertas configurada (à espera das chaves da API oficial da Amazon). Nada a publicar.");
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// Top 5 do dia (álbum de fotos) — a partir das 21h de Lisboa, uma vez por dia
+// ---------------------------------------------------------------------------
+const MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+
+function buildTopCaption(topDeals, titleLen) {
+  let c = `🏆 <b>TOP ${topDeals.length} OFERTAS DO DIA — RADAR PT</b> 🔥\n<i>As melhores descidas de preço de hoje na Amazon ES:</i>\n\n`;
+  topDeals.forEach((d, i) => {
+    const t = d.title.length > titleLen ? d.title.slice(0, titleLen - 1) + "…" : d.title;
+    c += `${MEDALS[i]} <b>${escapeHtml(t)}</b>\n<s>${d.oldPrice}</s> ➡️ <b>${d.currentPrice}</b> (-${d.discountPct}%)\n👉 <a href="${d.affUrl}">Ver oferta</a>\n\n`;
+  });
+  c += `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
+  return c;
+}
+
+// Comprimento visível (o limite de 1024 do Telegram não conta as tags HTML)
+function visibleLength(html) {
+  return decodeEntities(html.replace(/<[^>]+>/g, "")).length;
 }
 
 async function publishDailyTopIfDue() {
-  const currentHourUtc = new Date().getUTCHours();
-  const forceTop = process.env.FORCE_TOP_DAY === "true";
+  if (!FORCE_TOP_DAY && (lisbonHour < TOP_HOUR_LISBON || dailyData.lastSummaryDate === todayStr)) return;
 
-  // Dispara automaticamente a partir das 20h UTC (21h de Lisboa) uma vez por dia
-  if (!forceTop && (currentHourUtc < 20 || dailyData.lastSummaryDate === todayStr)) {
+  const valid = dailyData.deals.filter(d =>
+    d.oldPrice && d.discountPct >= MIN_DISCOUNT_PCT && !isBlockedSource(d.affUrl, d.imgUrl)
+  );
+  if (valid.length < 2) {
+    console.log(`Top do dia: só ${valid.length} oferta(s) hoje, não publicado.`);
+    if (!FORCE_TOP_DAY && lisbonHour >= 23) dailyData.lastSummaryDate = todayStr;
     return;
   }
-  if (dailyData.deals.length < 2) return;
 
-  // Ordena pelas maiores percentagens de desconto do dia (Top 5)
-  const topDeals = [...dailyData.deals]
-    .sort((a, b) => (b.discountPct || 0) - (a.discountPct || 0))
-    .slice(0, 5);
+  const topDeals = [...valid].sort((a, b) => b.discountPct - a.discountPct).slice(0, 5);
+  let caption = buildTopCaption(topDeals, 60);
+  for (const len of [45, 32, 22]) if (visibleLength(caption) > 1000) caption = buildTopCaption(topDeals, len);
 
-  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-  let summaryCaption = `🏆 <b>TOP ${topDeals.length} OFERTAS DO DIA — RADAR PT</b> 🔥\n<i>Resumo das melhores oportunidades detetadas hoje na Amazon ES:</i>\n\n`;
-
-  topDeals.forEach((d, idx) => {
-    const shortTitle = d.title.length > 52 ? d.title.slice(0, 49) + "..." : d.title;
-    const priceInfo = d.oldPrice
-      ? `<s>${d.oldPrice}</s> ➡️ <b>${d.currentPrice}</b> (-${d.discountPct}%)`
-      : `<b>${d.currentPrice || "Oferta Flash"}</b>`;
-    summaryCaption += `${medals[idx]} <b>${shortTitle}</b>\n💰 ${priceInfo}\n👉 <a href="${d.affUrl}">Ver oferta na Amazon ES</a>\n\n`;
-  });
-
-  summaryCaption += `⚡ <i>Ativa as notificações do canal para não perderes as quedas de preço de amanhã!</i>`;
-
-  const dealsWithImg = topDeals.filter(d => d.imgUrl);
-
-  let sentOk = false;
-  // Se houver pelo menos 2 imagens, envia como Álbum de Fotos (MediaGroup) com o Top na legenda
-  if (dealsWithImg.length >= 2) {
-    const media = dealsWithImg.map((d, i) => ({
+  let ok = false;
+  const withImg = topDeals.filter(d => d.imgUrl);
+  if (withImg.length >= 2) {
+    const media = withImg.map((d, i) => ({
       type: "photo",
       media: d.imgUrl,
-      ...(i === 0 ? { caption: summaryCaption, parse_mode: "HTML" } : {})
+      ...(i === 0 ? { caption, parse_mode: "HTML" } : {})
     }));
-
     try {
-      const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: CHAT_ID, media })
-      }).then(res => res.json());
-      sentOk = r.ok;
-    } catch (e) {}
+      ok = (await telegram("sendMediaGroup", { media })).ok;
+    } catch (e) {
+      console.error("sendMediaGroup erro:", e.message);
+    }
   }
 
-  // Fallback caso alguma imagem falhe no álbum: envia post único com botões para cada oferta do Top
-  if (!sentOk) {
-    const buttons = topDeals.map((d, idx) => [{
-      text: `${medals[idx]} ${d.currentPrice || "Ver"} - ${d.title.slice(0, 28)}...`,
+  if (!ok) {
+    const buttons = topDeals.map((d, i) => [{
+      text: `${MEDALS[i]} ${d.currentPrice} (-${d.discountPct}%) · ${d.title.slice(0, 26)}`,
       url: d.affUrl
     }]);
-
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: CHAT_ID,
-        text: summaryCaption,
-        parse_mode: "HTML",
-        disable_web_page_preview: false,
-        reply_markup: { inline_keyboard: buttons }
-      })
-    });
+    ok = (await telegram("sendMessage", {
+      text: caption,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: buttons }
+    })).ok;
   }
 
-  dailyData.lastSummaryDate = todayStr;
-  console.log("Top do Dia publicado com sucesso!");
+  if (ok) {
+    dailyData.lastSummaryDate = todayStr;
+    console.log(`Top ${topDeals.length} do dia publicado.`);
+  }
 }
 
+// ---------------------------------------------------------------------------
+// Publicação de uma oferta
+// ---------------------------------------------------------------------------
+async function publishDeal(asin, title, prices, imgUrl) {
+  const affUrl = `https://www.amazon.es/dp/${asin}?tag=${TAG}`;
+  const shortTitle = title.length > 300 ? title.slice(0, 299) + "…" : title;
+  const caption =
+    `🔥 <b>ALERTA DE PREÇO DETETADO!</b>\n\n` +
+    `📦 <b>${escapeHtml(shortTitle)}</b>\n\n` +
+    `❌ ANTES: <s>${prices.oldPrice}</s>\n` +
+    `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n\n` +
+    `👉 <a href="${affUrl}">Ver oferta na Amazon ES</a>\n\n` +
+    `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
+  const reply_markup = { inline_keyboard: [[{ text: "🛒 Comprar na Amazon", url: affUrl }]] };
+
+  let ok = false;
+  if (imgUrl) {
+    try {
+      ok = (await telegram("sendPhoto", { photo: imgUrl, caption, parse_mode: "HTML", reply_markup })).ok;
+    } catch (e) {
+      console.error("sendPhoto erro:", e.message);
+    }
+  }
+  if (!ok) ok = (await telegram("sendMessage", { text: caption, parse_mode: "HTML", reply_markup })).ok;
+  return ok ? affUrl : null;
+}
+
+// ---------------------------------------------------------------------------
+// Ciclo principal
+// ---------------------------------------------------------------------------
 async function run() {
-  console.log("A iniciar varrimento do Radar...");
-  let xml = "";
-  try {
-    xml = (await fetchWithTimeout("https://www.chollometro.com/rss/todo")).text;
-    if (!xml.includes("<item>")) throw new Error("Feed vazio");
-  } catch (e) {
-    xml = (await fetchWithTimeout("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.chollometro.com/rss/todo"))).text;
-  }
+  console.log(`A iniciar varrimento do Radar (${todayStr}, ${lisbonHour}h Lisboa)${DRY_RUN ? " [DRY_RUN]" : ""}...`);
 
-  const items = xml.split("<item>").slice(1, 20);
-  let publishedCount = 0;
+  const candidates = await fetchCandidateDeals();
+  const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0 };
+  let published = 0;
 
-  for (const item of items) {
-    if (publishedCount >= 2) break;
+  for (const c of candidates) {
+    if (published >= MAX_POSTS_PER_RUN) break;
+    const asin = String(c.asin || "").toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
+    if (isBlockedSource(c.imgUrl, c.url)) { stats.bloqueada++; continue; }
+    if (sent.includes(asin)) { stats.repetido++; continue; }
+    if (c.available === false) { stats.semStock++; continue; }
+    if ((c.condition && !/^(new|nuevo|novo)$/i.test(c.condition)) || isUsedOrRefurbished(c.title)) { stats.usado++; continue; }
 
-    const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/s);
-    const linkMatch = item.match(/<link>(.*?)<\/link>/);
-    const descMatch = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>|<description>(.*?)<\/description>/s);
+    const prices = computePrices(c.currentPrice, c.oldPrice, c.pricesIncludeEsVat !== false);
+    if (!prices) { stats.semDesconto++; continue; }
 
-    const rawTitle = (titleMatch ? (titleMatch[1] || titleMatch[2]) : "").trim();
-    const dealLink = (linkMatch ? linkMatch[1] : "").trim();
-    const desc = (descMatch ? (descMatch[1] || descMatch[2]) : "");
-
-    if (!rawTitle.toLowerCase().includes("amazon") && !desc.toLowerCase().includes("amazon") && !item.toLowerCase().includes("amazon")) {
-      continue;
-    }
-
-    let asin = null;
-    let pageHtml = "";
-    const directAsin = (desc + " " + dealLink + " " + item).match(/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
-    if (directAsin) asin = directAsin[1].toUpperCase();
-
-    if (dealLink) {
-      try {
-        const page = await fetchWithTimeout(dealLink);
-        pageHtml = page.text;
-        if (!asin) {
-          const m = (page.finalUrl + " " + page.text).match(/amazon\.es\/(?:[^"'\s<>]*\/)?(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
-          if (m) asin = m[1].toUpperCase();
-        }
-      } catch (e) {}
-    }
-
-    if (!asin || sent.includes(asin)) continue;
-
-    const { currentPrice, oldPrice, discountPct } = extractPrices(item, rawTitle, desc, pageHtml);
-
-    let priceBlock = `🔥 <b>OFERTA FLASH / CUPÃO ATIVO</b>`;
-    if (currentPrice && oldPrice) {
-      priceBlock = `❌ ANTES: <s>${oldPrice}</s>\n✅ <b>AGORA: ${currentPrice}</b> <i>(-${discountPct}% DESCONTO!)</i>`;
-    } else if (currentPrice) {
-      priceBlock = `✅ <b>AGORA: ${currentPrice}</b> <i>(Preço Mínimo / Promoção)</i>`;
-    }
-
-    const imgMatch = item.match(/url="([^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i) || desc.match(/<img[^>]+src="([^">]+)"/i);
-    const imgUrl = imgMatch ? imgMatch[1] : null;
-
-    const cleanTitle = cleanAndTranslateTitle(rawTitle);
-    const affUrl = `https://www.amazon.es/dp/${asin}?tag=${TAG}`;
-
-    const caption = `🔥 <b>ALERTA DE PREÇO DETETADO!</b>\n\n📦 <b>${cleanTitle}</b>\n\n${priceBlock}\n\n👉 <b>Ver Oferta na Amazon ES:</b>\n${affUrl}\n\n⚡ <i>Envio rápido para Portugal | Stock limitado</i>`;
-    const reply_markup = { inline_keyboard: [[{ text: "🛒 Comprar na Amazon ES", url: affUrl }]] };
-
-    let ok = false;
-    if (imgUrl) {
-      try {
-        const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: CHAT_ID, photo: imgUrl, caption, parse_mode: "HTML", reply_markup })
-        }).then(r => r.json());
-        ok = r.ok;
-      } catch (e) {}
-    }
-    if (!ok) {
-      try {
-        const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: CHAT_ID, text: caption, parse_mode: "HTML", reply_markup })
-        }).then(r => r.json());
-        ok = r.ok;
-      } catch (e) {}
-    }
-
-    if (ok) {
-      console.log("Publicado:", asin, cleanTitle, currentPrice, "Antes:", oldPrice);
+    const title = cleanAndTranslateTitle(c.title);
+    const affUrl = await publishDeal(asin, title, prices, c.imgUrl || null);
+    if (affUrl) {
+      console.log(`Publicado: ${asin} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
       sent.push(asin);
-      publishedCount++;
-
-      // Regista a oferta na lista do Top do Dia
-      dailyData.deals.push({
-        asin,
-        title: cleanTitle,
-        currentPrice,
-        oldPrice,
-        discountPct,
-        affUrl,
-        imgUrl
-      });
+      published++;
+      dailyData.deals.push({ asin, title, ...prices, affUrl, imgUrl: c.imgUrl || null });
     }
   }
 
-  // Verifica se já são 21h00 para lançar o Álbum do TOP DO DIA
+  console.log(`Publicadas: ${published}. Ignoradas →`, JSON.stringify(stats));
   await publishDailyTopIfDue();
-
-  fs.writeFileSync(DB_FILE, JSON.stringify(sent.slice(-500), null, 2));
-  fs.writeFileSync(DAILY_FILE, JSON.stringify(dailyData, null, 2));
 }
 
-run()
-  .catch(e => console.error("Erro controlado:", e.message))
-  .finally(() => process.exit(0));
+let exitCode = 0;
+try {
+  await run();
+} catch (e) {
+  console.error("Erro:", e.message);
+  exitCode = 1;
+} finally {
+  // Remove do histórico do dia qualquer entrada de fontes bloqueadas
+  dailyData.deals = dailyData.deals.filter(d => !isBlockedSource(d.affUrl, d.imgUrl));
+  if (!DRY_RUN || process.env.SAVE_STATE === "true") {
+    fs.writeFileSync(DB_FILE, JSON.stringify(sent.slice(-1000), null, 2));
+    fs.writeFileSync(DAILY_FILE, JSON.stringify(dailyData, null, 2));
+  }
+}
+process.exit(exitCode);
