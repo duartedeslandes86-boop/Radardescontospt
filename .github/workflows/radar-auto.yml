@@ -4,17 +4,30 @@ on:
   schedule:
     - cron: '*/20 * * * *'
   workflow_dispatch:
+    inputs:
+      force_top_day:
+        description: 'Publicar já o Top 5 do dia'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+# Nunca correr dois ciclos ao mesmo tempo (evita posts repetidos e conflitos no push)
+concurrency:
+  group: radar-auto
+  cancel-in-progress: false
 
 jobs:
   radar:
     name: Varrimento e Publicação Telegram
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Obter código do repositório
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configurar Node.js 20
         uses: actions/setup-node@v4
@@ -22,11 +35,27 @@ jobs:
           node-version: '20'
 
       - name: Executar Ciclo do Radar Autónomo
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
+          AWIN_PUBLISHER_ID: ${{ secrets.AWIN_PUBLISHER_ID }}
+          FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
         run: node cron-runner.mjs
 
       - name: Guardar histórico anti-duplicação no repositório
+        if: always()
         run: |
           git config user.name "radar-bot"
           git config user.email "bot@radardescontos.pt"
           git add sent_deals.json daily_deals.json || true
-          git diff --staged --quiet || (git commit -m "chore: update sent deals" && git push)
+          if git diff --staged --quiet; then
+            echo "Sem alterações ao estado."
+            exit 0
+          fi
+          git commit -m "chore: update sent deals"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          echo "Falhou o push do estado" && exit 1
