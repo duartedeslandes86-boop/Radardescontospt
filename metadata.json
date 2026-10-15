@@ -1,0 +1,6 @@
+{
+  "name": "Radar Descontos & Tech PT - Auto Engine",
+  "description": "Motor automático de varrimento de promoções e publicação direta para o canal Telegram @radardescontos_pt com links afiliados Amazon ES.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

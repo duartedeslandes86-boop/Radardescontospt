@@ -1,0 +1,48 @@
+name: Radar Descontos & Tech PT - Auto Engine (24/7)
+
+on:
+  schedule:
+    # Executa a cada 20 minutos (24 horas por dia, 7 dias por semana)
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+    # Permite execução manual a qualquer momento via painel do GitHub Actions
+
+permissions:
+  contents: write
+
+jobs:
+  radar-autopilot:
+    name: Varrimento e Publicação Telegram
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Obter código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Executar Ciclo do Radar Autónomo
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '8933540772:AAFP2_IKfYKLADfcv5rn7Miq_MuFnPEy1p4' }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
+        run: npx tsx cron-runner.ts
+
+      - name: Guardar histórico anti-duplicação no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sent_deals.json
+          if git diff --staged --quiet; then
+            echo "Nenhuma oferta nova despachada. O ficheiro sent_deals.json permanece inalterado."
+          else
+            git commit -m "Auto: atualizar sent_deals.json [skip ci]"
+            git push
+            echo "Histórico de ofertas atualizado e submetido com sucesso no repositório."
+          fi
