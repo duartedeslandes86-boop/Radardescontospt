@@ -2,39 +2,124 @@ name: Radar Descontos & Tech PT - Auto Engine (24/7)
 
 on:
   schedule:
-    # Executa a cada 20 minutos (24 horas por dia, 7 dias por semana)
     - cron: '*/20 * * * *'
   workflow_dispatch:
-    # Permite execução manual a qualquer momento via painel do GitHub Actions
 
 permissions:
   contents: write
 
 jobs:
-  radar-autopilot:
+  radar:
     name: Varrimento e Publicação Telegram
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    timeout-minutes: 5
-
     steps:
       - name: Obter código do repositório
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: true
 
       - name: Configurar Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Executar Ciclo do Radar (Zero-Dependency)
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '8933540772:AAFP2_IKfYKLADfcv5rn7Miq_MuFnPEy1p4' }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
-        run: node cron-runner.mjs
+      - name: Executar Ciclo do Radar Autónomo
+        run: |
+          node -e '
+          const fs = require("fs");
+          const BOT_TOKEN = "8933540772:AAFP2_IKfYKLADfcv5rn7Miq_MuFnPEy1p4";
+          const CHAT_ID = "-1003846917730";
+          const TAG = "radardescontospt-21";
+          const DB_FILE = "sent_deals.json";
+
+          let sent = [];
+          if (fs.existsSync(DB_FILE)) {
+            try { sent = JSON.parse(fs.readFileSync(DB_FILE, "utf8")); } catch (e) { sent = []; }
+          }
+
+          async function fetchText(url) {
+            const res = await fetch(url, {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36" },
+              redirect: "follow"
+            });
+            return { text: await res.text(), finalUrl: res.url };
+          }
+
+          async function run() {
+            console.log("A ler feed RSS...");
+            let xml = "";
+            try {
+              xml = (await fetchText("https://www.chollometro.com/rss/todo")).text;
+              if (!xml.includes("<item>")) throw new Error("Blocked");
+            } catch (e) {
+              xml = (await fetchText("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.chollometro.com/rss/todo"))).text;
+            }
+
+            const items = xml.split("<item>").slice(1, 15);
+            let publishedCount = 0;
+
+            for (const item of items) {
+              if (publishedCount >= 2) break;
+              const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/s);
+              const linkMatch = item.match(/<link>(.*?)<\/link>/);
+              const descMatch = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>|<description>(.*?)<\/description>/s);
+
+              const rawTitle = (titleMatch ? (titleMatch[1] || titleMatch[2]) : "").trim();
+              const dealLink = (linkMatch ? linkMatch[1] : "").trim();
+              const desc = (descMatch ? (descMatch[1] || descMatch[2]) : "");
+
+              if (!rawTitle.toLowerCase().includes("amazon") && !desc.toLowerCase().includes("amazon")) continue;
+
+              let asin = null;
+              const directAsin = (desc + " " + dealLink).match(/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+              if (directAsin) asin = directAsin[1].toUpperCase();
+
+              if (!asin && dealLink) {
+                try {
+                  const page = await fetchText(dealLink);
+                  const m = (page.finalUrl + " " + page.text).match(/amazon\.es\/(?:[^"'\''\s<>]*\/)?(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+                  if (m) asin = m[1].toUpperCase();
+                } catch (e) {}
+              }
+
+              if (!asin || sent.includes(asin)) continue;
+
+              const priceMatch = rawTitle.match(/(\d+[.,]?\d*\s*€)/);
+              const price = priceMatch ? priceMatch[1] : "Ver Oferta";
+              const imgMatch = desc.match(/<img[^>]+src="([^">]+)"/i);
+              const imgUrl = imgMatch ? imgMatch[1] : null;
+              const cleanTitle = rawTitle.replace(/Envío gratis/gi, "Envio grátis").replace(/Auriculares/gi, "Auscultadores");
+              const affUrl = `https://www.amazon.es/dp/${asin}?tag=${TAG}`;
+
+              const caption = `🔥 <b>ALERTA DE PREÇO DETETADO!</b>\n\n📦 <b>${cleanTitle}</b>\n\n✅ <b>AGORA: ${price}</b>\n\n👉 <b>Ver Oferta na Amazon ES:</b>\n${affUrl}\n\n⚡ <i>Envio rápido para Portugal | Stock limitado</i>`;
+              const reply_markup = { inline_keyboard: [[{ text: "🛒 Comprar na Amazon ES", url: affUrl }]] };
+
+              let ok = false;
+              if (imgUrl) {
+                const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chat_id: CHAT_ID, photo: imgUrl, caption, parse_mode: "HTML", reply_markup })
+                }).then(r => r.json());
+                ok = r.ok;
+              }
+              if (!ok) {
+                const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chat_id: CHAT_ID, text: caption, parse_mode: "HTML", reply_markup })
+                }).then(r => r.json());
+                ok = r.ok;
+              }
+
+              if (ok) {
+                console.log("Publicado:", asin, cleanTitle);
+                sent.push(asin);
+                publishedCount++;
+              }
+            }
+            fs.writeFileSync(DB_FILE, JSON.stringify(sent, null, 2));
+          }
+          run().catch(e => console.error(e));
+          '
 
       - name: Guardar histórico anti-duplicação no repositório
         run: |
