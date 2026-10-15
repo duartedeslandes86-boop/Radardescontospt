@@ -7,6 +7,7 @@
 // baixo que o bot viu nos 30 dias anteriores; publica quando hoje está ≥15% abaixo.
 // Fontes de terceiros (Chollometro e afins) estão bloqueadas.
 import fs from "fs";
+import { buildCollage } from "./collage.mjs";
 
 // ---------------------------------------------------------------------------
 // Configuração — o token do bot vem SÓ do Secret do GitHub (nunca escrito no código)
@@ -107,6 +108,32 @@ async function telegram(method, payload) {
   } catch (e) {
     telegramFail++;
     console.error(`Telegram ${method} erro de rede: ${e.message}`);
+    return { ok: false, description: e.message };
+  }
+}
+
+// Envio de uma imagem gerada pelo bot (ficheiro, não URL)
+async function telegramPhotoUpload(buffer, fields) {
+  if (DRY_RUN) {
+    if (process.env.PREVIEW_IMAGE) fs.writeFileSync(process.env.PREVIEW_IMAGE, buffer);
+    console.log(`\n[DRY_RUN] sendPhoto (imagem ${Math.round(buffer.length / 1024)} KB):\n${JSON.stringify(fields, null, 2)}\n`);
+    return { ok: true };
+  }
+  try {
+    const form = new FormData();
+    form.append("chat_id", CHAT_ID);
+    for (const [k, v] of Object.entries(fields)) form.append(k, typeof v === "string" ? v : JSON.stringify(v));
+    form.append("photo", new Blob([buffer], { type: "image/jpeg" }), "radar.jpg");
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+      method: "POST", body: form, signal: AbortSignal.timeout(60000)
+    });
+    const data = await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status} sem JSON` }));
+    if (data.ok) telegramOk++;
+    else { telegramFail++; console.error(`Telegram sendPhoto (ficheiro) falhou: ${data.description}`); }
+    return data;
+  } catch (e) {
+    telegramFail++;
+    console.error(`Telegram sendPhoto (ficheiro) erro: ${e.message}`);
     return { ok: false, description: e.message };
   }
 }
@@ -324,7 +351,7 @@ async function fetchCandidateDeals() {
         break;
       }
       console.log(`Categoria ${cat}: ${items.length} produtos com preço.`);
-      for (const it of items) seenNow.set(it.asin, it);
+      for (const it of items) if (!seenNow.has(it.asin)) seenNow.set(it.asin, { ...it, cat });
     } catch (e) {
       console.error(`Categoria ${cat} falhou: ${e.message}`);
     }
@@ -445,51 +472,84 @@ async function publishDeal(asin, title, prices, imgUrl) {
 }
 
 // ---------------------------------------------------------------------------
-// "Mais vendido" — quando não há descontos reais (ex.: primeiros dias sem histórico).
-// Só preço atual, nunca um ANTES inventado. Máx. 1 a cada 2h, entre as 9h e as 23h.
+// Grelha "Mais vendidos" — quando não há descontos reais (ex.: primeiros dias sem histórico).
+// Uma imagem com até 6 produtos numerados + links no texto + botões. Só preço atual,
+// nunca um ANTES inventado. Máx. 1 a cada 3h, entre as 9h e as 23h.
 // ---------------------------------------------------------------------------
-const FEATURED_EVERY_MIN = 120;
+const FEATURED_EVERY_MIN = 180;
 const FEATURED_HOURS = [9, 23];
+const FEATURED_MIN_PRICE = 10;
+const FEATURED_COUNT = 6;
+const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
+
+// Escolhe produtos alternando categorias (pela ordem do ranking)
+function pickFeatured() {
+  const featured = history._meta.featured || [];
+  const ok = lastSeenItems.filter(it =>
+    !featured.includes(it.asin) && !sent.includes(it.asin) &&
+    it.price >= FEATURED_MIN_PRICE && it.imgUrl &&
+    (!it.rating || it.rating >= 4.2) &&
+    !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
+  );
+  const byCat = new Map();
+  for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
+  const picks = [];
+  while (picks.length < FEATURED_COUNT && [...byCat.values()].some(l => l.length)) {
+    for (const list of byCat.values()) if (list.length && picks.length < FEATURED_COUNT) picks.push(list.shift());
+  }
+  return picks;
+}
 
 async function publishFeaturedIfDue() {
   if (lisbonHour < FEATURED_HOURS[0] || lisbonHour >= FEATURED_HOURS[1]) return;
   const last = history._meta.lastFeaturedAt ? Date.parse(history._meta.lastFeaturedAt) : 0;
   if (Date.now() - last < FEATURED_EVERY_MIN * 60000) return;
 
-  const featured = history._meta.featured || [];
-  const pick = lastSeenItems.find(it =>
-    !featured.includes(it.asin) && !sent.includes(it.asin) &&
-    (!it.rating || it.rating >= 4.2) &&
-    !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
-  );
-  if (!pick) return;
+  const picks = pickFeatured();
+  if (picks.length < 3) {
+    console.log(`Grelha: só ${picks.length} produto(s) elegíveis, fica para o próximo ciclo.`);
+    return;
+  }
 
-  const title = cleanAndTranslateTitle(pick.title);
-  const price = formatEur(pick.price * VAT_ES_TO_PT);
-  const affUrl = `https://www.amazon.es/dp/${pick.asin}?tag=${TAG}`;
-  const caption =
-    `⭐ <b>MAIS VENDIDO NA AMAZON ES</b>\n\n` +
-    `📦 <b>${escapeHtml(title.length > 300 ? title.slice(0, 299) + "…" : title)}</b>\n\n` +
-    (pick.rating ? `⭐ ${String(pick.rating).replace(".", ",")} de 5\n` : "") +
-    `💶 <b>PREÇO ATUAL: ${price}</b>\n` +
-    `<i>Estamos a acompanhar o preço — avisamos aqui quando baixar.</i>\n\n` +
-    `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n` +
-    `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
-  const reply_markup = { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }]] };
+  const rows = picks.map(it => {
+    const title = cleanAndTranslateTitle(it.title);
+    return {
+      ...it,
+      title,
+      priceLabel: formatEur(it.price * VAT_ES_TO_PT),
+      affUrl: `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`
+    };
+  });
+
+  let caption = `🔥 <b>MAIS VENDIDOS HOJE NA AMAZON ES</b>\n<i>Preços atuais com IVA PT incluído</i>\n\n`;
+  rows.forEach((r, i) => {
+    const t = r.title.length > 70 ? r.title.slice(0, 69) + "…" : r.title;
+    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(t)}</a> — <b>${r.priceLabel}</b>\n`;
+  });
+  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>`;
+
+  const buttons = [];
+  for (let i = 0; i < rows.length; i += 2) {
+    buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.priceLabel}`, url: r.affUrl })));
+  }
+  const reply_markup = { inline_keyboard: buttons };
 
   let ok = false;
-  if (pick.imgUrl) {
-    try {
-      ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML", reply_markup })).ok;
-    } catch (e) {
-      console.error("sendPhoto erro:", e.message);
-    }
+  try {
+    const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.priceLabel })));
+    ok = (await telegramPhotoUpload(image, { caption, parse_mode: "HTML", reply_markup })).ok;
+  } catch (e) {
+    console.error(`Grelha: não deu para montar a imagem (${e.message}) — envio em álbum.`);
   }
-  if (!ok) ok = (await telegram("sendMessage", { text: caption, parse_mode: "HTML", reply_markup })).ok;
+  if (!ok) {
+    // Plano B: álbum com as fotos (sem botões, links no texto)
+    const media = rows.map((r, i) => ({ type: "photo", media: r.imgUrl, ...(i === 0 ? { caption, parse_mode: "HTML" } : {}) }));
+    ok = (await telegram("sendMediaGroup", { media })).ok;
+  }
   if (ok) {
-    history._meta.featured = [...featured, pick.asin].slice(-500);
+    history._meta.featured = [...(history._meta.featured || []), ...rows.map(r => r.asin)].slice(-600);
     history._meta.lastFeaturedAt = new Date().toISOString();
-    console.log(`Mais vendido publicado: ${pick.asin} | ${title} | ${price}`);
+    console.log(`Grelha publicada: ${rows.map(r => `${r.asin} ${r.priceLabel}`).join(" | ")}`);
   }
 }
 
