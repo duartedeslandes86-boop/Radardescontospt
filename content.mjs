@@ -3,18 +3,19 @@
 
 // Rotação de categorias da Amazon (3 por ciclo). Tech e gaming aparecem 2x por volta.
 // Sem higiene/bebé/animais/beleza: o canal é Tech, Gaming, Casa e Desporto.
+// (slugs confirmados na Amazon.es: "home" e "diy" não existem → "appliances" e "tools")
 export const CATEGORIES = [
-  "electronics", "computers", "videogames",
-  "kitchen", "electronics", "home",
-  "computers", "toys", "sports",
-  "videogames", "diy", "automotive", "lighting"
+  "electronics", "kitchen", "videogames",
+  "tools", "computers", "sports",
+  "appliances", "toys", "automotive", "lighting"
 ];
 
 // Etiquetas por categoria da Amazon (no Telegram, tocar numa etiqueta filtra o canal)
 const CAT_TAGS = {
   electronics: ["#tech"], computers: ["#informatica", "#tech"], videogames: ["#gaming"],
   kitchen: ["#cozinha", "#casa"], home: ["#casa"], toys: ["#brinquedos"], sports: ["#desporto"],
-  diy: ["#bricolage", "#casa"], automotive: ["#auto"], lighting: ["#casa"]
+  tools: ["#bricolage", "#casa"], appliances: ["#eletrodomesticos", "#casa"],
+  automotive: ["#auto"], lighting: ["#casa"]
 };
 // Etiquetas por loja Awin
 const STORE_TAGS = [
