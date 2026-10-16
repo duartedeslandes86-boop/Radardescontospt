@@ -492,7 +492,9 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote) {
 // nunca um ANTES inventado. Máx. 1 a cada 3h, entre as 9h e as 23h.
 // ---------------------------------------------------------------------------
 const FEATURED_EVERY_MIN = 180;
-const FEATURED_HOURS = [9, 23];
+// Horário de publicação no canal (hora de Lisboa): das 9h00 às 22h00. Fora disto só regista preços.
+const POST_HOURS = [9, 22];
+const inPostHours = () => lisbonHour >= POST_HOURS[0] && lisbonHour < POST_HOURS[1];
 const FEATURED_MIN_PRICE = 10;
 const FEATURED_COUNT = 6;
 const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
@@ -516,7 +518,7 @@ function pickFeatured() {
 }
 
 async function publishFeaturedIfDue() {
-  if (lisbonHour < FEATURED_HOURS[0] || lisbonHour >= FEATURED_HOURS[1]) return;
+  if (!inPostHours()) return;
   const last = history._meta.lastFeaturedAt ? Date.parse(history._meta.lastFeaturedAt) : 0;
   if (Date.now() - last < FEATURED_EVERY_MIN * 60000) return;
 
@@ -596,7 +598,8 @@ async function run() {
   const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0 };
   let published = 0;
 
-  for (const c of candidates) {
+  if (!inPostHours()) console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
+  for (const c of (inPostHours() ? candidates : [])) {
     if (published >= MAX_POSTS_PER_RUN) break;
     const id = String(c.id || "");
     if (!id || !c.url) continue;
