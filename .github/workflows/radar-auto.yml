@@ -2,8 +2,10 @@ name: Radar Descontos & Tech PT - Auto Engine (24/7)
 
 on:
   schedule:
-    - cron: '*/20 7-21 * * *'
-  workflow_dispatch:
+    # Corre aos minutos 07, 27 e 47, das 8h às 21h UTC (cobre 9h–22h em Lisboa, verão e inverno).
+    # O GitHub atrasa/salta muitas execuções agendadas → o disparo principal vem do n8n (API workflow_dispatch).
+    - cron: '7,27,47 8-21 * * *'
+  workflow_dispatch: # manual, ou por API (n8n)
     inputs:
       force_top_day:
         description: 'Publicar já o Top 5 do dia'
