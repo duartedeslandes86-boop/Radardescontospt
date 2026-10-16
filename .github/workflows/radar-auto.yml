@@ -2,7 +2,7 @@ name: Radar Descontos & Tech PT - Auto Engine (24/7)
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
+    - cron: '*/20 7-21 * * *'
   workflow_dispatch:
     inputs:
       force_top_day:
