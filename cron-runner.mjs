@@ -21,6 +21,9 @@ const AWIN_PUBLISHER_ID = process.env.AWIN_PUBLISHER_ID || "3124493";
 const AWIN_FEED_URL = process.env.AWIN_FEED_URL || ""; // link do Create-a-Feed (Secret)
 // Lojas Awin que não entram no canal (não combinam com Tech/Casa/Desporto)
 const AWIN_EXCLUDE = new RegExp(process.env.AWIN_EXCLUDE || "sinocare", "i");
+// Chat privado do dono: recebe um resumo quando um ciclo não publica nada no canal
+const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
+const runNotes = []; // motivos a incluir no resumo privado
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
 
@@ -364,6 +367,7 @@ async function fetchCandidateDeals() {
       const { blocked, items } = await fetchCategory(cat);
       if (blocked) {
         console.warn(`Amazon pediu captcha em "${cat}" — paro por este ciclo.`);
+        runNotes.push(`a Amazon pediu captcha em "${cat}"`);
         break;
       }
       console.log(`Categoria ${cat}: ${items.length} produtos com preço.`);
@@ -458,6 +462,7 @@ async function publishDailyTopIfDue() {
     dailyData.lastSummaryDate = todayStr;
     console.log(`Top ${topDeals.length} do dia publicado.`);
   }
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -518,14 +523,19 @@ function pickFeatured() {
 }
 
 async function publishFeaturedIfDue() {
-  if (!inPostHours()) return;
+  if (!inPostHours()) return false;
   const last = history._meta.lastFeaturedAt ? Date.parse(history._meta.lastFeaturedAt) : 0;
-  if (Date.now() - last < FEATURED_EVERY_MIN * 60000) return;
+  if (Date.now() - last < FEATURED_EVERY_MIN * 60000) {
+    const next = new Date(last + FEATURED_EVERY_MIN * 60000).toLocaleTimeString("pt-PT", { timeZone: "Europe/Lisbon", hour: "2-digit", minute: "2-digit" });
+    runNotes.push(`próxima grelha "Mais vendidos" a partir das ${next}`);
+    return false;
+  }
 
   const picks = pickFeatured();
   if (picks.length < 3) {
     console.log(`Grelha: só ${picks.length} produto(s) elegíveis, fica para o próximo ciclo.`);
-    return;
+    runNotes.push(`grelha adiada: só ${picks.length} produto(s) elegíveis`);
+    return false;
   }
 
   const rows = picks.map(it => {
@@ -568,6 +578,7 @@ async function publishFeaturedIfDue() {
     history._meta.lastFeaturedAt = new Date().toISOString();
     console.log(`Grelha publicada: ${rows.map(r => `${r.asin} ${r.priceLabel}`).join(" | ")}`);
   }
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -622,8 +633,39 @@ async function run() {
   }
 
   console.log(`Publicadas: ${published}. Ignoradas →`, JSON.stringify(stats));
-  if (published === 0) await publishFeaturedIfDue();
-  await publishDailyTopIfDue();
+  const gridPosted = published === 0 ? await publishFeaturedIfDue() : false;
+  const topPosted = await publishDailyTopIfDue();
+
+  // Resumo privado para o dono quando nada foi publicado no canal
+  if (ADMIN_CHAT_ID && published === 0 && !gridPosted && !topPosted) {
+    const reasons = [];
+    if (!inPostHours()) reasons.push(`fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h)`);
+    reasons.push(`${lastSeenItems.length} produtos lidos, ${candidates.length} abaixo do preço do histórico`);
+    if (stats.semDesconto) reasons.push(`${stats.semDesconto} com desconto abaixo de ${MIN_DISCOUNT_PCT}%`);
+    if (stats.repetido) reasons.push(`${stats.repetido} já publicadas`);
+    reasons.push(...runNotes);
+    const text = `🤖 <b>Radar PT — ${String(lisbonHour).padStart(2, "0")}h</b>\nNenhuma promoção publicada neste ciclo.\n\n` +
+      reasons.map(r => `• ${escapeHtml(r)}`).join("\n");
+    await sendAdmin(text);
+  }
+}
+
+// Mensagem privada (não conta para o estado do ciclo; se falhar, só fica no log)
+async function sendAdmin(text) {
+  if (DRY_RUN) { console.log(`\n[DRY_RUN] privado para ${ADMIN_CHAT_ID}:\n${text}\n`); return; }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: ADMIN_CHAT_ID, text, parse_mode: "HTML", disable_notification: true }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.ok) console.log("Resumo privado enviado ao dono.");
+    else console.error(`Resumo privado falhou: ${data.description || res.status} (o dono já carregou em Iniciar no bot?)`);
+  } catch (e) {
+    console.error(`Resumo privado erro: ${e.message}`);
+  }
 }
 
 let exitCode = 0;
