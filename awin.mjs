@@ -111,11 +111,14 @@ const OTTO_MIN_PRICE = 20;
 
 /**
  * Devolve até 4 produtos Ottocast: [{ id, title, price, oldPrice, imgUrl, url }] (preços em €, sem ajuste de IVA).
- * 1) Feed Awin (se existir): produtos do merchant 96499, em stock, ≥20€.
- * 2) Sem feed: preços e imagens em direto da loja oficial (mercado de Portugal, em EUR).
+ * 1) Preços e imagens em direto da loja oficial (mercado de Portugal, em EUR) — prioridade,
+ *    porque o feed Awin da Ottocast não é atualizado desde 15/05/2026.
+ * 2) Se a loja falhar: feed Awin (merchant 96499, em stock, ≥20€), se existir.
  */
 export async function fetchOttocastPicks({ feedUrl } = {}) {
-  if (feedUrl) {
+  const live = await fetchOttocastStore();
+  if (live.length >= 2 || !feedUrl) return live;
+  {
     try {
       const rows = await loadAwinFeed(feedUrl);
       const otto = rows.filter(r =>
@@ -136,10 +139,14 @@ export async function fetchOttocastPicks({ feedUrl } = {}) {
         return otto.sort((a, b) => pct(b) - pct(a)).slice(0, 4);
       }
     } catch (e) {
-      console.error(`Ottocast: feed Awin falhou (${e.message}) — uso a loja oficial.`);
+      console.error(`Ottocast: feed Awin falhou (${e.message}).`);
     }
   }
+  return live;
+}
 
+// Lê os 4 produtos em direto da loja oficial (mercado PT, EUR)
+async function fetchOttocastStore() {
   const out = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const getJson = async url => {
