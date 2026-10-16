@@ -8,6 +8,7 @@
 // Fontes de terceiros (Chollometro e afins) estão bloqueadas.
 import fs from "fs";
 import { buildCollage } from "./collage.mjs";
+import { fetchAwinCandidates } from "./awin.mjs";
 
 // ---------------------------------------------------------------------------
 // Configuração — o token do bot vem SÓ do Secret do GitHub (nunca escrito no código)
@@ -17,6 +18,9 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1003846917730";
 const TAG = process.env.AMAZON_PARTNER_TAG || "radardescontospt-21";
 // Awin: preparado para quando a conta for aprovada (ainda não é usado)
 const AWIN_PUBLISHER_ID = process.env.AWIN_PUBLISHER_ID || "3124493";
+const AWIN_FEED_URL = process.env.AWIN_FEED_URL || ""; // link do Create-a-Feed (Secret)
+// Lojas Awin que não entram no canal (não combinam com Tech/Casa/Desporto)
+const AWIN_EXCLUDE = new RegExp(process.env.AWIN_EXCLUDE || "sinocare", "i");
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
 
@@ -392,12 +396,12 @@ async function fetchCandidateDeals() {
 const MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
 
 function buildTopCaption(topDeals, titleLen) {
-  let c = `🏆 <b>TOP ${topDeals.length} OFERTAS DO DIA — RADAR PT</b> 🔥\n<i>As melhores descidas de preço de hoje na Amazon ES:</i>\n\n`;
+  let c = `🏆 <b>TOP ${topDeals.length} OFERTAS DO DIA — RADAR PT</b> 🔥\n<i>As melhores descidas de preço de hoje:</i>\n\n`;
   topDeals.forEach((d, i) => {
     const t = d.title.length > titleLen ? d.title.slice(0, titleLen - 1) + "…" : d.title;
     c += `${MEDALS[i]} <b>${escapeHtml(t)}</b>\n<s>${d.oldPrice}</s> ➡️ <b>${d.currentPrice}</b> (-${d.discountPct}%)\n👉 <a href="${d.affUrl}">Ver oferta</a>\n\n`;
   });
-  c += `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
+  c += `⚡ <i>Preços verificados hoje | Stock limitado</i>`;
   return c;
 }
 
@@ -459,17 +463,16 @@ async function publishDailyTopIfDue() {
 // ---------------------------------------------------------------------------
 // Publicação de uma oferta
 // ---------------------------------------------------------------------------
-async function publishDeal(asin, title, prices, imgUrl) {
-  const affUrl = `https://www.amazon.es/dp/${asin}?tag=${TAG}`;
+async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote) {
   const shortTitle = title.length > 300 ? title.slice(0, 299) + "…" : title;
   const caption =
     `🔥 <b>ALERTA DE PREÇO DETETADO!</b>\n\n` +
     `📦 <b>${escapeHtml(shortTitle)}</b>\n\n` +
     `❌ ANTES: <s>${prices.oldPrice}</s>\n` +
     `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n\n` +
-    `👉 <a href="${affUrl}">Ver oferta na Amazon ES</a>\n\n` +
-    `⚡ <i>Envio para Portugal (IVA PT incluído) | Stock limitado</i>`;
-  const reply_markup = { inline_keyboard: [[{ text: "🛒 Comprar na Amazon", url: affUrl }]] };
+    `👉 <a href="${affUrl}">Ver oferta na ${escapeHtml(store)}</a>\n\n` +
+    `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>`;
+  const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }]] };
 
   let ok = false;
   if (imgUrl) {
@@ -571,16 +574,34 @@ async function publishFeaturedIfDue() {
 async function run() {
   console.log(`A iniciar varrimento do Radar (${todayStr}, ${lisbonHour}h Lisboa)${DRY_RUN ? " [DRY_RUN]" : ""}...`);
 
-  const candidates = await fetchCandidateDeals();
+  const amazon = (await fetchCandidateDeals()).map(c => ({
+    ...c, id: c.asin, store: "Amazon ES", url: `https://www.amazon.es/dp/${c.asin}?tag=${TAG}`
+  }));
+  let awin = [];
+  try {
+    awin = await fetchAwinCandidates({
+      feedUrl: AWIN_FEED_URL, exclude: AWIN_EXCLUDE, isUsed: isUsedOrRefurbished, isBlocked: isBlockedSource
+    });
+  } catch (e) {
+    console.error(`Feed Awin falhou: ${e.message}`);
+  }
+
+  // Alterna Amazon e Awin para o canal não ficar só com uma loja
+  const candidates = [];
+  for (let i = 0; i < Math.max(amazon.length, awin.length); i++) {
+    if (amazon[i]) candidates.push(amazon[i]);
+    if (awin[i]) candidates.push(awin[i]);
+  }
+
   const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0 };
   let published = 0;
 
   for (const c of candidates) {
     if (published >= MAX_POSTS_PER_RUN) break;
-    const asin = String(c.asin || "").toUpperCase();
-    if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
+    const id = String(c.id || "");
+    if (!id || !c.url) continue;
     if (isBlockedSource(c.imgUrl, c.url)) { stats.bloqueada++; continue; }
-    if (wasSent(asin)) { stats.repetido++; continue; }
+    if (wasSent(id)) { stats.repetido++; continue; }
     if (c.available === false) { stats.semStock++; continue; }
     if ((c.condition && !/^(new|nuevo|novo)$/i.test(c.condition)) || isUsedOrRefurbished(c.title)) { stats.usado++; continue; }
 
@@ -588,12 +609,12 @@ async function run() {
     if (!prices) { stats.semDesconto++; continue; }
 
     const title = cleanAndTranslateTitle(c.title);
-    const affUrl = await publishDeal(asin, title, prices, c.imgUrl || null);
+    const affUrl = await publishDeal(c.url, c.store, title, prices, c.imgUrl || null, c.pricesIncludeEsVat !== false);
     if (affUrl) {
-      console.log(`Publicado: ${asin} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
-      sent[asin] = todayStr;
+      console.log(`Publicado: ${c.store} | ${id} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
+      sent[id] = todayStr;
       published++;
-      dailyData.deals.push({ asin, title, ...prices, affUrl, imgUrl: c.imgUrl || null });
+      dailyData.deals.push({ asin: id, store: c.store, title, ...prices, affUrl, imgUrl: c.imgUrl || null });
     }
   }
 
