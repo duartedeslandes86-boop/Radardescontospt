@@ -9,6 +9,7 @@
 import fs from "fs";
 import { buildCollage } from "./collage.mjs";
 import { fetchAwinCandidates } from "./awin.mjs";
+import { CATEGORIES, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
 
 // ---------------------------------------------------------------------------
 // Configuração — o token do bot vem SÓ do Secret do GitHub (nunca escrito no código)
@@ -27,7 +28,8 @@ const runNotes = []; // motivos a incluir no resumo privado
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
 
-const MAX_POSTS_PER_RUN = Number(process.env.MAX_POSTS_PER_RUN || 2);
+const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
+const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
 const MIN_DISCOUNT_PCT = 15;
 const VAT_ES_TO_PT = 1.23 / 1.21;
 const TOP_HOUR_LISBON = 21;
@@ -39,10 +41,6 @@ const MIN_PRIOR_DAYS = 2;         // dias anteriores com preço registado antes 
 const MAX_DISCOUNT_PCT = 80;      // acima disto é quase sempre erro de leitura
 const HISTORY_MAX_ASINS = 4000;
 const CATEGORIES_PER_RUN = Number(process.env.CATEGORIES_PER_RUN || 3);
-const CATEGORIES = [
-  "electronics", "computers", "kitchen", "home", "videogames", "toys", "beauty",
-  "sports", "diy", "hpc", "pet-supplies", "automotive", "baby", "lighting"
-];
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 // Fontes bloqueadas: nenhum link, imagem ou oferta destes sites é aceite
@@ -68,6 +66,9 @@ function lisbonNow() {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
 }
 const { date: todayStr, hour: lisbonHour } = lisbonNow();
+// Datas especiais: Black Friday, Cyber Monday, 11.11 → mais publicações e cabeçalho próprio
+const SEASON = seasonFor(todayStr);
+const MAX_POSTS_PER_RUN = SEASON?.boost ? MAX_POSTS_BASE + 1 : MAX_POSTS_BASE;
 
 // ---------------------------------------------------------------------------
 // Estado (ficheiros JSON guardados no repositório)
@@ -215,7 +216,35 @@ const TRANSLATIONS = [
   [/(?<!\p{L})Champ[uú](?!\p{L})/giu, "Champô"],
   [/(?<!\p{L})Crema de Noche(?!\p{L})/giu, "Creme de Noite"],
   [/(?<!\p{L})Crema de D[ií]a(?!\p{L})/giu, "Creme de Dia"],
+  // Marcas que a tradução automática da Amazon estraga
+  [/(?<!\p{L})Tampa (C\d{2,4}\w*)/gu, "Tapo $1"],
+  [/(?<!\p{L})Videojuegos?(?!\p{L})/giu, "Videojogo"],
   [/(?<!\p{L})Juego de(?!\p{L})/giu, "Conjunto de"],
+  [/(?<!\p{L})Juegos?(?!\p{L})/giu, "Jogo"],
+  [/(?<!\p{L})[UÚ]ltima generaci[oó]n(?!\p{L})/giu, "Última geração"],
+  [/(?<!\p{L})Pantalla(?!\p{L})/giu, "Ecrã"],
+  [/(?<!\p{L})Altavoces(?!\p{L})/giu, "Colunas"],
+  [/(?<!\p{L})Mando(?!\p{L})/giu, "Comando"],
+  [/(?<!\p{L})Cafetera(?!\p{L})/giu, "Máquina de café"],
+  [/(?<!\p{L})Aspiradora(?!\p{L})/giu, "Aspirador"],
+  [/(?<!\p{L})Freidora de aire(?!\p{L})/giu, "Fritadeira sem óleo"],
+  [/(?<!\p{L})Freidora(?!\p{L})/giu, "Fritadeira"],
+  [/(?<!\p{L})Sart[eé]n(?!\p{L})/giu, "Frigideira"],
+  [/(?<!\p{L})Olla(?!\p{L})/giu, "Panela"],
+  [/(?<!\p{L})Bombilla(s?)(?!\p{L})/giu, "Lâmpada$1"],
+  [/(?<!\p{L})L[aá]mpara(?!\p{L})/giu, "Candeeiro"],
+  [/(?<!\p{L})Taladro(?!\p{L})/giu, "Berbequim"],
+  [/(?<!\p{L})Herramientas?(?!\p{L})/giu, "Ferramentas"],
+  [/(?<!\p{L})Silla(?!\p{L})/giu, "Cadeira"],
+  [/(?<!\p{L})Almohada(?!\p{L})/giu, "Almofada"],
+  [/(?<!\p{L})Coche(?!\p{L})/giu, "Carro"],
+  [/(?<!\p{L})Patinete el[eé]ctrico(?!\p{L})/giu, "Trotinete elétrica"],
+  [/(?<!\p{L})El[eé]ctric([oa]s?)(?!\p{L})/giu, "Elétric$1"],
+  [/(?<!\p{L})Recargables?(?!\p{L})/giu, "Recarregável"],
+  [/(?<!\p{L})Gris(?!\p{L})/giu, "Cinzento"],
+  [/(?<!\p{L})Rojo(?!\p{L})/giu, "Vermelho"],
+  [/(?<!\p{L})Plata(?!\p{L})/giu, "Prateado"],
+  [/(?<!\p{L})sin(?!\p{L})/gu, "sem"],
   [/(?<!\p{L})en trozos(?!\p{L})/giu, "em pedaços"],
   [/(?<!\p{L})colores diferentes(?!\p{L})/giu, "cores diferentes"],
   [/(?<!\p{L})Env[ií]o gratis(?!\p{L})/giu, "Envio grátis"],
@@ -330,6 +359,12 @@ function recordPrice(item) {
   h.p[todayStr] = prev ? Math.min(prev, item.price) : item.price;
 }
 
+// Quantos dias anteriores (até 30) têm preço registado — para dizer a verdade no post
+function priorDays(asin) {
+  const h = history[asin];
+  return h ? Object.keys(h.p).filter(d => d < todayStr && daysBetween(d, todayStr) <= HISTORY_DAYS).length : 0;
+}
+
 // Preço de referência: o mais baixo dos 30 dias anteriores (não conta hoje)
 function referencePrice(asin) {
   const h = history[asin];
@@ -383,7 +418,7 @@ async function fetchCandidateDeals() {
     const ref = referencePrice(it.asin); // calcula ANTES de registar o preço de hoje
     recordPrice(it);
     if (ref && it.price < ref) {
-      candidates.push({ asin: it.asin, title: it.title, currentPrice: it.price, oldPrice: ref, imgUrl: it.imgUrl, pricesIncludeEsVat: true });
+      candidates.push({ asin: it.asin, title: it.title, currentPrice: it.price, oldPrice: ref, imgUrl: it.imgUrl, cat: it.cat, refDays: priorDays(it.asin), pricesIncludeEsVat: true });
     }
   }
   pruneHistory();
@@ -468,15 +503,27 @@ async function publishDailyTopIfDue() {
 // ---------------------------------------------------------------------------
 // Publicação de uma oferta
 // ---------------------------------------------------------------------------
-async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote) {
-  const shortTitle = title.length > 300 ? title.slice(0, 299) + "…" : title;
+// Linha honesta sobre o histórico: só diz "30 dias" quando há mesmo 30 dias de registos
+function historyNote(refDays) {
+  if (!refDays) return "";
+  return refDays >= HISTORY_DAYS
+    ? `📉 <i>Preço mais baixo dos últimos 30 dias</i>\n`
+    : `📉 <i>Mais barato do que em qualquer dia que registámos (${refDays} dias)</i>\n`;
+}
+
+const seasonHeader = () => (SEASON?.label ? `<b>${SEASON.label}</b>\n` : "");
+const seasonFooter = () => (SEASON?.note ? `\n${SEASON.note}` : "");
+
+async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags = "", refDays = 0, header = "🔥 <b>ALERTA DE PREÇO DETETADO!</b>" } = {}) {
   const caption =
-    `🔥 <b>ALERTA DE PREÇO DETETADO!</b>\n\n` +
-    `📦 <b>${escapeHtml(shortTitle)}</b>\n\n` +
+    seasonHeader() + `${header}\n\n` +
+    `📦 <b>${escapeHtml(title)}</b>\n\n` +
     `❌ ANTES: <s>${prices.oldPrice}</s>\n` +
-    `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n\n` +
+    `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n` +
+    historyNote(refDays) + `\n` +
     `👉 <a href="${affUrl}">Ver oferta na ${escapeHtml(store)}</a>\n\n` +
-    `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>`;
+    `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>` +
+    (tags ? `\n${tags}` : "") + seasonFooter();
   const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }]] };
 
   let ok = false;
@@ -496,11 +543,11 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote) {
 // Uma imagem com até 6 produtos numerados + links no texto + botões. Só preço atual,
 // nunca um ANTES inventado. Máx. 1 a cada 3h, entre as 9h e as 23h.
 // ---------------------------------------------------------------------------
-const FEATURED_EVERY_MIN = 180;
+const FEATURED_EVERY_MIN = SEASON?.boost ? 120 : 180;
 // Horário de publicação no canal (hora de Lisboa): das 9h00 às 22h00. Fora disto só regista preços.
 const POST_HOURS = [9, 22];
 const inPostHours = () => lisbonHour >= POST_HOURS[0] && lisbonHour < POST_HOURS[1];
-const FEATURED_MIN_PRICE = 10;
+const FEATURED_MIN_PRICE = 20;
 const FEATURED_COUNT = 6;
 const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
 
@@ -510,7 +557,7 @@ function pickFeatured() {
   const ok = lastSeenItems.filter(it =>
     !(it.asin in featured) && !wasSent(it.asin) &&
     it.price >= FEATURED_MIN_PRICE && it.imgUrl &&
-    (!it.rating || it.rating >= 4.2) &&
+    (!it.rating || it.rating >= 4.2) && !isLowValue(it.title) &&
     !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
   );
   const byCat = new Map();
@@ -539,7 +586,7 @@ async function publishFeaturedIfDue() {
   }
 
   const rows = picks.map(it => {
-    const title = cleanAndTranslateTitle(it.title);
+    const title = shortenTitle(cleanAndTranslateTitle(it.title), 60);
     return {
       ...it,
       title,
@@ -548,12 +595,12 @@ async function publishFeaturedIfDue() {
     };
   });
 
-  let caption = `🔥 <b>MAIS VENDIDOS HOJE NA AMAZON ES</b>\n<i>Preços atuais com IVA PT incluído</i>\n\n`;
+  let caption = seasonHeader() + `🔥 <b>MAIS VENDIDOS HOJE NA AMAZON ES</b>\n<i>Preços atuais com IVA PT incluído</i>\n\n`;
   rows.forEach((r, i) => {
-    const t = r.title.length > 70 ? r.title.slice(0, 69) + "…" : r.title;
-    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(t)}</a> — <b>${r.priceLabel}</b>\n`;
+    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a> — <b>${r.priceLabel}</b>\n`;
   });
-  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>`;
+  const gridTags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" ")))].join(" ");
+  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${gridTags}` + seasonFooter();
 
   const buttons = [];
   for (let i = 0; i < rows.length; i += 2) {
@@ -563,7 +610,10 @@ async function publishFeaturedIfDue() {
 
   let ok = false;
   try {
-    const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.priceLabel })));
+    const image = await buildCollage(
+      rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.priceLabel })),
+      SEASON?.label ? { title: SEASON.label.replace(/^\S+\s/, "") } : undefined
+    );
     ok = (await telegramPhotoUpload(image, { caption, parse_mode: "HTML", reply_markup })).ok;
   } catch (e) {
     console.error(`Grelha: não deu para montar a imagem (${e.message}) — envio em álbum.`);
@@ -579,6 +629,83 @@ async function publishFeaturedIfDue() {
     console.log(`Grelha publicada: ${rows.map(r => `${r.asin} ${r.priceLabel}`).join(" | ")}`);
   }
   return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Oferta do dia — uma vez por dia, a partir das 12h (hora de almoço).
+// Com desconto real: a melhor oferta ainda não publicada. Sem descontos ainda:
+// "Destaque do dia" com o mais vendido mais bem avaliado (só preço atual).
+// ---------------------------------------------------------------------------
+const DEAL_OF_DAY_HOUR = 12;
+
+async function publishDealOfDayIfDue(candidates) {
+  if (!inPostHours() || lisbonHour < DEAL_OF_DAY_HOUR || history._meta.dealOfDayDate === todayStr) return false;
+
+  let ok = false;
+  const best = candidates.find(c =>
+    !wasSent(String(c.id)) && !isUsedOrRefurbished(c.title) && !isLowValue(c.title) &&
+    !isBlockedSource(c.imgUrl, c.url) && computePrices(c.currentPrice, c.oldPrice, c.pricesIncludeEsVat !== false)
+  );
+  if (best) {
+    const prices = computePrices(best.currentPrice, best.oldPrice, best.pricesIncludeEsVat !== false);
+    const title = shortenTitle(cleanAndTranslateTitle(best.title), 90);
+    const affUrl = await publishDeal(best.url, best.store, title, prices, best.imgUrl || null, best.pricesIncludeEsVat !== false,
+      { tags: tagsFor({ cat: best.cat, store: best.store }), refDays: best.refDays || 0, header: "⭐ <b>OFERTA DO DIA</b> ⭐" });
+    if (affUrl) {
+      ok = true;
+      sent[String(best.id)] = todayStr;
+      dailyData.deals.push({ asin: String(best.id), store: best.store, title, ...prices, affUrl, imgUrl: best.imgUrl || null });
+      console.log(`Oferta do dia: ${best.store} | ${best.id} | ${title} (-${prices.discountPct}%)`);
+    }
+  } else {
+    // Ainda sem descontos: destaque do mais vendido mais bem avaliado (≥25€)
+    const featured = history._meta.featured;
+    const pick = [...lastSeenItems]
+      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= 4.4 && !(it.asin in featured) &&
+        !wasSent(it.asin) && !isLowValue(it.title) && !isUsedOrRefurbished(it.title))
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
+    if (!pick) return false;
+    const title = shortenTitle(cleanAndTranslateTitle(pick.title), 90);
+    const affUrl = `https://www.amazon.es/dp/${pick.asin}?tag=${TAG}`;
+    const caption = seasonHeader() + `⭐ <b>DESTAQUE DO DIA</b> ⭐\n\n📦 <b>${escapeHtml(title)}</b>\n\n` +
+      `⭐ ${String(pick.rating).replace(".", ",")} de 5 · um dos mais vendidos da Amazon ES\n` +
+      `💶 <b>PREÇO ATUAL: ${formatEur(pick.price * VAT_ES_TO_PT)}</b>\n\n` +
+      `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n` +
+      tagsFor({ cat: pick.cat, store: "Amazon ES" }) + seasonFooter();
+    ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }]] } })).ok;
+    if (ok) {
+      history._meta.featured[pick.asin] = todayStr;
+      console.log(`Destaque do dia: ${pick.asin} | ${title}`);
+    }
+  }
+  if (ok) history._meta.dealOfDayDate = todayStr;
+  return ok;
+}
+
+// Mensagem de boas-vindas: publicada e fixada no canal só quando pedido (workflow manual)
+const WELCOME_TEXT =
+  `👋 <b>Bem-vindo ao Radar Descontos & Tech PT!</b>\n\n` +
+  `Aqui encontras as melhores promoções de <b>tecnologia, gaming, casa e desporto</b> com envio para Portugal — escolhidas automaticamente, todos os dias.\n\n` +
+  `📌 <b>Como funciona</b>\n` +
+  `• ❌ ANTES / ✅ AGORA — só publicamos descontos reais, com preços já com IVA português\n` +
+  `• 🔥 Grelhas com os mais vendidos do dia\n` +
+  `• ⭐ Oferta do dia, por volta do almoço\n` +
+  `• 🏆 Top 5 do dia, às 21h\n` +
+  `• 🕘 Publicações entre as 9h e as 22h — nada de madrugada\n\n` +
+  `🏷️ Toca numa etiqueta (#tech, #gaming, #casa, #auto…) para ver só essa categoria.\n\n` +
+  `🔔 <b>Ativa as notificações</b> para não perderes as ofertas relâmpago — o stock esgota depressa!\n\n` +
+  `📣 Conheces alguém que gosta de poupar? Partilha: t.me/radardescontos_pt\n\n` +
+  `<i>Como Afiliado da Amazon e de outras lojas, obtemos uma comissão por compras qualificadas, sem custo extra para ti.</i>`;
+
+async function publishWelcome() {
+  const r = await telegram("sendMessage", { text: WELCOME_TEXT, parse_mode: "HTML", disable_web_page_preview: true });
+  if (!r.ok) return;
+  const messageId = r.result?.message_id;
+  if (messageId) {
+    const pin = await telegram("pinChatMessage", { message_id: messageId, disable_notification: true });
+    console.log(pin.ok ? "Boas-vindas publicada e fixada." : "Boas-vindas publicada (não deu para fixar).");
+  } else console.log("Boas-vindas publicada.");
 }
 
 // ---------------------------------------------------------------------------
@@ -606,8 +733,11 @@ async function run() {
     if (awin[i]) candidates.push(awin[i]);
   }
 
-  const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0 };
+  const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0, poucoInteresse: 0 };
   let published = 0;
+
+  if (PUBLISH_WELCOME) await publishWelcome();
+  if (await publishDealOfDayIfDue(candidates)) published++;
 
   if (!inPostHours()) console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
   for (const c of (inPostHours() ? candidates : [])) {
@@ -618,12 +748,14 @@ async function run() {
     if (wasSent(id)) { stats.repetido++; continue; }
     if (c.available === false) { stats.semStock++; continue; }
     if ((c.condition && !/^(new|nuevo|novo)$/i.test(c.condition)) || isUsedOrRefurbished(c.title)) { stats.usado++; continue; }
+    if (isLowValue(c.title)) { stats.poucoInteresse++; continue; }
 
     const prices = computePrices(c.currentPrice, c.oldPrice, c.pricesIncludeEsVat !== false);
     if (!prices) { stats.semDesconto++; continue; }
 
-    const title = cleanAndTranslateTitle(c.title);
-    const affUrl = await publishDeal(c.url, c.store, title, prices, c.imgUrl || null, c.pricesIncludeEsVat !== false);
+    const title = shortenTitle(cleanAndTranslateTitle(c.title), 90);
+    const affUrl = await publishDeal(c.url, c.store, title, prices, c.imgUrl || null, c.pricesIncludeEsVat !== false,
+      { tags: tagsFor({ cat: c.cat, store: c.store }), refDays: c.refDays || 0 });
     if (affUrl) {
       console.log(`Publicado: ${c.store} | ${id} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
       sent[id] = todayStr;
