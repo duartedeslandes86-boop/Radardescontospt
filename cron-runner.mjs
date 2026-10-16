@@ -292,6 +292,8 @@ let history = readJson(HISTORY_FILE, {});
 if (!history || typeof history !== "object" || Array.isArray(history)) history = {};
 if (!history._meta) history._meta = { nextCategory: 0 };
 history._meta.featured = pruneDated(toDatedMap(history._meta.featured)); // produtos já mostrados nas grelhas
+history._meta.featuredAt = Object.fromEntries(Object.entries(history._meta.featuredAt || {})
+  .filter(([, at]) => Date.now() - Date.parse(at) < 2 * 86400000));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -354,6 +356,8 @@ function recordPrice(item) {
   const h = history[item.asin] || (history[item.asin] = { p: {} });
   h.t = item.title;
   h.i = item.imgUrl || h.i || null;
+  if (item.cat) h.c = item.cat;
+  if (item.rating) h.r = item.rating;
   h.seen = todayStr;
   const prev = h.p[todayStr];
   h.p[todayStr] = prev ? Math.min(prev, item.price) : item.price;
@@ -539,96 +543,151 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
 }
 
 // ---------------------------------------------------------------------------
-// Grelha "Mais vendidos" — quando não há descontos reais (ex.: primeiros dias sem histórico).
-// Uma imagem com até 6 produtos numerados + links no texto + botões. Só preço atual,
-// nunca um ANTES inventado. Máx. 1 a cada 3h, entre as 9h e as 23h.
+// Publicação de 20 em 20 minutos (9h–22h): em cada ciclo sai UMA publicação com até 4 produtos.
+//  1) Há descontos reais → 1 oferta sozinha, ou grelha com até 4 ofertas (ANTES/AGORA).
+//  2) Não há → grelha temática com até 4 mais vendidos (preço atual, nunca um ANTES inventado).
+// Se a Amazon pedir captcha, usa os produtos vistos nos últimos 2 dias (reserva).
 // ---------------------------------------------------------------------------
-const FEATURED_EVERY_MIN = SEASON?.boost ? 120 : 180;
 // Horário de publicação no canal (hora de Lisboa): das 9h00 às 22h00. Fora disto só regista preços.
 const POST_HOURS = [9, 22];
 const inPostHours = () => lisbonHour >= POST_HOURS[0] && lisbonHour < POST_HOURS[1];
-const FEATURED_MIN_PRICE = 20;
-const FEATURED_COUNT = 6;
+const MIN_GAP_MIN = 15;          // evita duas publicações seguidas se o bot correr 2x no mesmo período
+const GRID_SIZE = 4;             // até 4 produtos por publicação
+const GRID_MIN_PRICE = 20;
+const GRID_REPEAT_HOURS = 6;     // um produto só volta a uma grelha passadas 6 horas…
+const GRID_MIN_REPEAT_HOURS = 2; // …ou 2 horas, se não houver produtos novos suficientes
 const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
+const CAT_TITLES = {
+  electronics: "🔌 TOP TECNOLOGIA", computers: "💻 TOP INFORMÁTICA", videogames: "🎮 TOP GAMING",
+  kitchen: "🍳 TOP COZINHA", home: "🏠 TOP CASA", toys: "🧸 TOP BRINQUEDOS", sports: "⚽ TOP DESPORTO",
+  diy: "🛠️ TOP BRICOLAGE", automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO"
+};
 
-// Escolhe produtos alternando categorias (pela ordem do ranking)
-function pickFeatured() {
-  const featured = history._meta.featured;
-  const ok = lastSeenItems.filter(it =>
-    !(it.asin in featured) && !wasSent(it.asin) &&
-    it.price >= FEATURED_MIN_PRICE && it.imgUrl &&
-    (!it.rating || it.rating >= 4.2) && !isLowValue(it.title) &&
-    !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
-  );
-  const byCat = new Map();
-  for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
-  const picks = [];
-  while (picks.length < FEATURED_COUNT && [...byCat.values()].some(l => l.length)) {
-    for (const list of byCat.values()) if (list.length && picks.length < FEATURED_COUNT) picks.push(list.shift());
+const minutesSinceLastPost = () =>
+  history._meta.lastPostAt ? (Date.now() - Date.parse(history._meta.lastPostAt)) / 60000 : Infinity;
+const markPosted = () => { history._meta.lastPostAt = new Date().toISOString(); };
+
+// Produtos disponíveis: os lidos agora + os vistos nos últimos 2 dias (reserva para quando há captcha)
+function productPool() {
+  const pool = new Map(lastSeenItems.map(it => [it.asin, it]));
+  for (const [asin, h] of Object.entries(history)) {
+    if (asin === "_meta" || pool.has(asin) || !h.i || !h.t || !h.seen) continue;
+    if (daysBetween(h.seen, todayStr) > 1) continue;
+    const price = h.p[h.seen];
+    if (!price) continue;
+    pool.set(asin, { asin, title: h.t, imgUrl: h.i, price, cat: h.c || "", rating: h.r || 0, fromHistory: true });
   }
-  return picks;
+  return [...pool.values()];
 }
 
-async function publishFeaturedIfDue() {
-  if (!inPostHours()) return false;
-  const last = history._meta.lastFeaturedAt ? Date.parse(history._meta.lastFeaturedAt) : 0;
-  if (Date.now() - last < FEATURED_EVERY_MIN * 60000) {
-    const next = new Date(last + FEATURED_EVERY_MIN * 60000).toLocaleTimeString("pt-PT", { timeZone: "Europe/Lisbon", hour: "2-digit", minute: "2-digit" });
-    runNotes.push(`próxima grelha "Mais vendidos" a partir das ${next}`);
-    return false;
+// Há quantas horas o produto saiu numa grelha (Infinity = nunca)
+function hoursSinceFeatured(asin) {
+  const at = (history._meta.featuredAt || {})[asin];
+  return at ? (Date.now() - Date.parse(at)) / 3600000 : Infinity;
+}
+const recentlyFeatured = asin => hoursSinceFeatured(asin) < GRID_REPEAT_HOURS;
+
+// Escolhe até 4 mais vendidos: tenta uma categoria-tema (diferente da última), completa com outras
+function pickGrid() {
+  const eligible = productPool().filter(it =>
+    it.imgUrl && it.price >= GRID_MIN_PRICE && (!it.rating || it.rating >= 4.2) && !wasSent(it.asin) &&
+    hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
+    !isLowValue(it.title) && !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
+  );
+  // Primeiro os que não saíram nas últimas 6h; se faltarem, os que saíram há mais tempo
+  let ok = eligible.filter(it => !recentlyFeatured(it.asin));
+  if (ok.length < GRID_SIZE) {
+    const older = eligible.filter(it => recentlyFeatured(it.asin))
+      .sort((a, b) => hoursSinceFeatured(b.asin) - hoursSinceFeatured(a.asin));
+    ok = ok.concat(older.slice(0, GRID_SIZE - ok.length));
   }
-
-  const picks = pickFeatured();
-  if (picks.length < 3) {
-    console.log(`Grelha: só ${picks.length} produto(s) elegíveis, fica para o próximo ciclo.`);
-    runNotes.push(`grelha adiada: só ${picks.length} produto(s) elegíveis`);
-    return false;
+  const byCat = new Map();
+  for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
+  // Categoria-tema: a que tem mais produtos, evitando repetir a da publicação anterior
+  const cats = [...byCat.entries()].filter(([c]) => c).sort((a, b) => b[1].length - a[1].length);
+  const theme = (cats.find(([c, l]) => c !== history._meta.lastGridCat && l.length >= 3) ||
+                 cats.find(([, l]) => l.length >= 3) || [null])[0];
+  let picks = theme ? byCat.get(theme).slice(0, GRID_SIZE) : [];
+  if (picks.length < GRID_SIZE) {
+    const rest = ok.filter(it => !picks.includes(it));
+    picks = picks.concat(rest.slice(0, GRID_SIZE - picks.length));
   }
+  const sameCat = theme && picks.filter(p => p.cat === theme).length >= 3;
+  return { picks, theme: sameCat ? theme : null };
+}
 
-  const rows = picks.map(it => {
-    const title = shortenTitle(cleanAndTranslateTitle(it.title), 60);
-    return {
-      ...it,
-      title,
-      priceLabel: formatEur(it.price * VAT_ES_TO_PT),
-      affUrl: `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`
-    };
-  });
-
-  let caption = seasonHeader() + `🔥 <b>MAIS VENDIDOS HOJE NA AMAZON ES</b>\n<i>Preços atuais com IVA PT incluído</i>\n\n`;
-  rows.forEach((r, i) => {
-    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a> — <b>${r.priceLabel}</b>\n`;
-  });
-  const gridTags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" ")))].join(" ");
-  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${gridTags}` + seasonFooter();
-
+// Envia a imagem em grelha (ou álbum, se a imagem falhar) com texto e botões
+async function sendGrid(rows, caption, collageTitle) {
   const buttons = [];
   for (let i = 0; i < rows.length; i += 2) {
-    buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.priceLabel}`, url: r.affUrl })));
+    buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.buttonLabel}`, url: r.affUrl })));
   }
-  const reply_markup = { inline_keyboard: buttons };
-
   let ok = false;
   try {
-    const image = await buildCollage(
-      rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.priceLabel })),
-      SEASON?.label ? { title: SEASON.label.replace(/^\S+\s/, "") } : undefined
-    );
-    ok = (await telegramPhotoUpload(image, { caption, parse_mode: "HTML", reply_markup })).ok;
+    const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.imageLabel })), { title: collageTitle });
+    ok = (await telegramPhotoUpload(image, { caption, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } })).ok;
   } catch (e) {
     console.error(`Grelha: não deu para montar a imagem (${e.message}) — envio em álbum.`);
   }
   if (!ok) {
-    // Plano B: álbum com as fotos (sem botões, links no texto)
     const media = rows.map((r, i) => ({ type: "photo", media: r.imgUrl, ...(i === 0 ? { caption, parse_mode: "HTML" } : {}) }));
     ok = (await telegram("sendMediaGroup", { media })).ok;
   }
+  return ok;
+}
+
+// Grelha de mais vendidos (preço atual)
+async function publishBestsellerGrid() {
+  const { picks, theme } = pickGrid();
+  if (picks.length < 2) {
+    console.log(`Grelha: só ${picks.length} produto(s) elegíveis.`);
+    runNotes.push(`só ${picks.length} produto(s) elegíveis para a grelha`);
+    return false;
+  }
+  const rows = picks.map(it => {
+    const price = formatEur(it.price * VAT_ES_TO_PT);
+    return {
+      ...it, title: shortenTitle(cleanAndTranslateTitle(it.title), 60),
+      imageLabel: price, buttonLabel: price,
+      affUrl: `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`
+    };
+  });
+  const head = theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
+  let caption = seasonHeader() + `<b>${head} — AMAZON ES</b>\n<i>Os mais vendidos agora · preços com IVA PT incluído</i>\n\n`;
+  rows.forEach((r, i) => {
+    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a> — <b>${r.imageLabel}</b>` +
+      (r.rating ? ` · ⭐${String(r.rating).replace(".", ",")}` : "") + `\n`;
+  });
+  const tags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" ")))].join(" ");
+  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${tags}` + seasonFooter();
+
+  const collageTitle = SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : (theme ? head.replace(/^\S+\s/, "") : "MAIS VENDIDOS HOJE");
+  const ok = await sendGrid(rows, caption, collageTitle);
   if (ok) {
-    for (const r of rows) history._meta.featured[r.asin] = todayStr;
-    history._meta.lastFeaturedAt = new Date().toISOString();
-    console.log(`Grelha publicada: ${rows.map(r => `${r.asin} ${r.priceLabel}`).join(" | ")}`);
+    history._meta.featuredAt = history._meta.featuredAt || {};
+    for (const r of rows) { history._meta.featured[r.asin] = todayStr; history._meta.featuredAt[r.asin] = new Date().toISOString(); }
+    history._meta.lastGridCat = theme || "";
+    console.log(`Grelha publicada (${theme || "mista"}${rows.some(r => r.fromHistory) ? ", com reserva" : ""}): ${rows.map(r => `${r.asin} ${r.imageLabel}`).join(" | ")}`);
   }
   return ok;
+}
+
+// Grelha de ofertas com desconto real (ANTES/AGORA)
+async function publishDealsGrid(deals) {
+  const rows = deals.map(d => ({
+    ...d,
+    imageLabel: `${d.prices.currentPrice}  -${d.prices.discountPct}%`,
+    buttonLabel: `${d.prices.currentPrice} (-${d.prices.discountPct}%)`,
+    affUrl: d.url
+  }));
+  let caption = seasonHeader() + `🔥 <b>${rows.length} DESCIDAS DE PREÇO AGORA</b>\n\n`;
+  rows.forEach((r, i) => {
+    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a>\n` +
+      `      ❌ <s>${r.prices.oldPrice}</s> ✅ <b>${r.prices.currentPrice}</b> (-${r.prices.discountPct}%)\n`;
+  });
+  const tags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: r.store }).split(" ")))].join(" ");
+  caption += `\n📉 <i>Preços abaixo do mais baixo que registámos</i>\n⚡ <i>Stock limitado</i>\n${tags}` + seasonFooter();
+  return sendGrid(rows, caption, SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : "DESCIDAS DE PREÇO");
 }
 
 // ---------------------------------------------------------------------------
@@ -659,9 +718,8 @@ async function publishDealOfDayIfDue(candidates) {
     }
   } else {
     // Ainda sem descontos: destaque do mais vendido mais bem avaliado (≥25€)
-    const featured = history._meta.featured;
-    const pick = [...lastSeenItems]
-      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= 4.4 && !(it.asin in featured) &&
+    const pick = productPool()
+      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= 4.4 && hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
         !wasSent(it.asin) && !isLowValue(it.title) && !isUsedOrRefurbished(it.title))
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
     if (!pick) return false;
@@ -679,7 +737,7 @@ async function publishDealOfDayIfDue(candidates) {
       console.log(`Destaque do dia: ${pick.asin} | ${title}`);
     }
   }
-  if (ok) history._meta.dealOfDayDate = todayStr;
+  if (ok) { history._meta.dealOfDayDate = todayStr; markPosted(); }
   return ok;
 }
 
@@ -689,7 +747,7 @@ const WELCOME_TEXT =
   `Aqui encontras as melhores promoções de <b>tecnologia, gaming, casa e desporto</b> com envio para Portugal — escolhidas automaticamente, todos os dias.\n\n` +
   `📌 <b>Como funciona</b>\n` +
   `• ❌ ANTES / ✅ AGORA — só publicamos descontos reais, com preços já com IVA português\n` +
-  `• 🔥 Grelhas com os mais vendidos do dia\n` +
+  `• 🔥 Novas ofertas e mais vendidos a cada 20 minutos\n` +
   `• ⭐ Oferta do dia, por volta do almoço\n` +
   `• 🏆 Top 5 do dia, às 21h\n` +
   `• 🕘 Publicações entre as 9h e as 22h — nada de madrugada\n\n` +
@@ -737,11 +795,10 @@ async function run() {
   let published = 0;
 
   if (PUBLISH_WELCOME) await publishWelcome();
-  if (await publishDealOfDayIfDue(candidates)) published++;
 
-  if (!inPostHours()) console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
-  for (const c of (inPostHours() ? candidates : [])) {
-    if (published >= MAX_POSTS_PER_RUN) break;
+  // Ofertas com desconto real, já filtradas
+  const deals = [];
+  for (const c of candidates) {
     const id = String(c.id || "");
     if (!id || !c.url) continue;
     if (isBlockedSource(c.imgUrl, c.url)) { stats.bloqueada++; continue; }
@@ -749,27 +806,49 @@ async function run() {
     if (c.available === false) { stats.semStock++; continue; }
     if ((c.condition && !/^(new|nuevo|novo)$/i.test(c.condition)) || isUsedOrRefurbished(c.title)) { stats.usado++; continue; }
     if (isLowValue(c.title)) { stats.poucoInteresse++; continue; }
-
     const prices = computePrices(c.currentPrice, c.oldPrice, c.pricesIncludeEsVat !== false);
     if (!prices) { stats.semDesconto++; continue; }
+    deals.push({ ...c, id, prices, title: shortenTitle(cleanAndTranslateTitle(c.title), 90) });
+  }
 
-    const title = shortenTitle(cleanAndTranslateTitle(c.title), 90);
-    const affUrl = await publishDeal(c.url, c.store, title, prices, c.imgUrl || null, c.pricesIncludeEsVat !== false,
-      { tags: tagsFor({ cat: c.cat, store: c.store }), refDays: c.refDays || 0 });
-    if (affUrl) {
-      console.log(`Publicado: ${c.store} | ${id} | ${title} | ${prices.oldPrice} → ${prices.currentPrice} (-${prices.discountPct}%)`);
-      sent[id] = todayStr;
-      published++;
-      dailyData.deals.push({ asin: id, store: c.store, title, ...prices, affUrl, imgUrl: c.imgUrl || null });
+  const gap = minutesSinceLastPost();
+  if (!inPostHours()) {
+    console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
+  } else if (gap < MIN_GAP_MIN) {
+    console.log(`Última publicação há ${Math.round(gap)} min — espero pelo próximo ciclo.`);
+    runNotes.push(`última publicação há ${Math.round(gap)} min`);
+  } else if (await publishDealOfDayIfDue(candidates)) {
+    published++;
+  } else if (deals.length) {
+    // Com descontos: 1 oferta sozinha ou grelha com até 4
+    const batch = deals.slice(0, GRID_SIZE);
+    let ok;
+    if (batch.length === 1) {
+      const d = batch[0];
+      ok = !!(await publishDeal(d.url, d.store, d.title, d.prices, d.imgUrl || null, d.pricesIncludeEsVat !== false,
+        { tags: tagsFor({ cat: d.cat, store: d.store }), refDays: d.refDays || 0 }));
+    } else {
+      ok = await publishDealsGrid(batch);
     }
+    if (ok) {
+      for (const d of batch) {
+        sent[d.id] = todayStr;
+        dailyData.deals.push({ asin: d.id, store: d.store, title: d.title, ...d.prices, affUrl: d.url, imgUrl: d.imgUrl || null });
+        console.log(`Publicado: ${d.store} | ${d.id} | ${d.title} | ${d.prices.oldPrice} → ${d.prices.currentPrice} (-${d.prices.discountPct}%)`);
+      }
+      published += batch.length;
+      markPosted();
+    }
+  } else if (await publishBestsellerGrid()) {
+    published++;
+    markPosted();
   }
 
   console.log(`Publicadas: ${published}. Ignoradas →`, JSON.stringify(stats));
-  const gridPosted = published === 0 ? await publishFeaturedIfDue() : false;
   const topPosted = await publishDailyTopIfDue();
 
   // Resumo privado para o dono quando nada foi publicado no canal
-  if (ADMIN_CHAT_ID && published === 0 && !gridPosted && !topPosted) {
+  if (ADMIN_CHAT_ID && published === 0 && !topPosted) {
     const reasons = [];
     if (!inPostHours()) reasons.push(`fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h)`);
     reasons.push(`${lastSeenItems.length} produtos lidos, ${candidates.length} abaixo do preço do histórico`);
