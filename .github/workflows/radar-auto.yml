@@ -54,6 +54,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
           AWIN_PUBLISHER_ID: ${{ secrets.AWIN_PUBLISHER_ID }}
+          AWIN_FEED_URL: ${{ secrets.AWIN_FEED_URL }}
           FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
         run: node cron-runner.mjs
 
