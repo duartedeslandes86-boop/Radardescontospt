@@ -20,7 +20,8 @@ const CAT_TAGS = {
 // Etiquetas por loja Awin
 const STORE_TAGS = [
   [/ottocast/i, ["#auto", "#tech"]], [/wondershare/i, ["#software", "#tech"]],
-  [/colamy/i, ["#casa"]], [/emoko/i, ["#desporto"]]
+  [/colamy/i, ["#casa"]], [/emoko/i, ["#desporto"]],
+  [/allpowers/i, ["#energia", "#casa", "#tech"]], [/jimmy/i, ["#casa", "#tech"]], [/tenways/i, ["#desporto", "#ebike"]]
 ];
 
 export function tagsFor({ cat, store } = {}) {
