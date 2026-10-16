@@ -9,6 +9,7 @@
 import fs from "fs";
 import { buildCollage } from "./collage.mjs";
 import { fetchAwinCandidates, fetchOttocastPicks, OTTOCAST_STORE_LINK } from "./awin.mjs";
+import { BRANDS, fetchBrandDeals, brandStoreLink } from "./brands.mjs";
 import { CATEGORIES, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,8 @@ const runNotes = []; // motivos a incluir no resumo privado
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
 const FORCE_OTTOCAST = process.env.FORCE_OTTOCAST === "true"; // publicar já a Grelha Especial Ottocast
+// publicar já um especial de marca: "allpowers", "jimmy" ou "tenways" (vazio = nenhum)
+const FORCE_BRAND = String(process.env.FORCE_BRAND || "").toLowerCase().trim();
 
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
 const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
@@ -691,6 +694,106 @@ async function publishOttocastGrid({ force = false } = {}) {
   return ok;
 }
 
+// ---------------------------------------------------------------------------
+// Especiais de marca (lojas Awin lidas da loja oficial, preço para Portugal)
+//  - ALLPOWERS: grelha diária a partir das 17h
+//  - jimmy.eu:  grelha a partir das 19h, só com pelo menos 2 produtos em promoção
+//  - Tenways:   1 e-bike sozinha, no máximo 1x por semana (a partir das 11h), só com desconto ≥10%
+// ---------------------------------------------------------------------------
+const BRAND_SPECIALS = {
+  allpowers: {
+    hour: 17, minItems: 2, everyDays: 1,
+    header: "🔋 <b>ESPECIAL ENERGIA — ALLPOWERS</b>\n<i>Estações de energia e kits solares · loja oficial Portugal</i>",
+    collageTitle: "ESPECIAL ENERGIA · ALLPOWERS", collageSubtitle: "Loja oficial ALLPOWERS Portugal · energia portátil e solar",
+    tags: "#energia #casa #tech #allpowers"
+  },
+  jimmy: {
+    hour: 19, minItems: 2, everyDays: 1,
+    header: "🧹 <b>ESPECIAL CASA — JIMMY</b>\n<i>Aspiradores sem fios e purificadores · loja oficial</i>",
+    collageTitle: "ESPECIAL CASA · JIMMY", collageSubtitle: "Loja oficial JIMMY · aspiradores sem fios",
+    tags: "#casa #tech #jimmy"
+  },
+  tenways: {
+    hour: 11, minItems: 1, everyDays: 7, single: true,
+    header: "🚲 <b>ESPECIAL E-BIKE — TENWAYS</b>",
+    tags: "#desporto #ebike #tenways"
+  }
+};
+const BRAND_REPEAT_DAYS = 3; // um produto só volta a um especial passados 3 dias (se houver outros)
+
+function brandFeaturedRecently(id) {
+  const d = (history._meta.brandFeatured || {})[id];
+  return !!d && daysBetween(d, todayStr) < BRAND_REPEAT_DAYS;
+}
+
+async function publishBrandSpecial(key, { force = false } = {}) {
+  const cfg = BRAND_SPECIALS[key], brand = BRANDS[key];
+  const st = (history._meta.brandState ||= {})[key] ||= {};
+  if (!force) {
+    if (lisbonHour < cfg.hour) return false;
+    if (st.checkedDate === todayStr) return false;                       // já tentou hoje
+    if (st.postedDate && daysBetween(st.postedDate, todayStr) < cfg.everyDays) return false;
+  }
+
+  let picks;
+  try {
+    picks = await fetchBrandDeals(brand, { max: cfg.single ? 1 : GRID_SIZE, skip: brandFeaturedRecently });
+  } catch (e) {
+    console.error(`${brand.name}: loja sem resposta (${e.message}) — tento no próximo ciclo.`);
+    runNotes.push(`${brand.name}: loja sem resposta`);
+    return false;
+  }
+  if (picks.length < cfg.minItems) {
+    console.log(`${brand.name}: só ${picks.length} produto(s) em promoção — hoje não há especial.`);
+    st.checkedDate = todayStr; // não volta a verificar hoje
+    return false;
+  }
+
+  let ok;
+  if (cfg.single) {
+    const p = picks[0];
+    ok = !!(await publishDeal(p.url, brand.name, p.title,
+      { oldPrice: formatEur(p.oldPrice), currentPrice: formatEur(p.price), discountPct: p.pct }, p.imgUrl, false,
+      { tags: cfg.tags, header: cfg.header }));
+  } else {
+    const rows = picks.map(p => {
+      const now = formatEur(p.price);
+      return {
+        ...p, affUrl: p.url,
+        imageLabel: `${now}  -${p.pct}%`, buttonLabel: `${now} (-${p.pct}%)`,
+        line: `PVP <s>${formatEur(p.oldPrice)}</s> ✅ <b>${now}</b> (-${p.pct}%)`
+      };
+    });
+    let caption = seasonHeader() + `${cfg.header}\n\n`;
+    rows.forEach((r, i) => { caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a>\n      ${r.line}\n`; });
+    caption += `\n🛒 <a href="${brandStoreLink(brand)}">Ver toda a loja ${escapeHtml(brand.name)}</a>\n` +
+      `⚡ <i>Preços da loja oficial para Portugal, podem mudar | Stock limitado</i>\n${cfg.tags}` + seasonFooter();
+    ok = await sendGrid(rows, caption, cfg.collageTitle, cfg.collageSubtitle);
+  }
+
+  if (ok) {
+    st.checkedDate = todayStr;
+    st.postedDate = todayStr;
+    const bf = (history._meta.brandFeatured ||= {});
+    for (const p of picks) bf[p.id] = todayStr;
+    for (const [id, d] of Object.entries(bf)) if (daysBetween(d, todayStr) > 14) delete bf[id];
+    for (const p of picks) {
+      dailyData.deals.push({ asin: p.id, store: brand.name, title: p.title, currentPrice: formatEur(p.price),
+        oldPrice: formatEur(p.oldPrice), discountPct: p.pct, affUrl: p.url, imgUrl: p.imgUrl });
+    }
+    console.log(`Especial ${brand.name} publicado: ${picks.map(p => `${p.id} ${formatEur(p.price)} (-${p.pct}%)`).join(" | ")}`);
+  }
+  return ok;
+}
+
+// Especiais por ordem de prioridade (1 por ciclo)
+async function publishDueBrandSpecial() {
+  for (const key of ["allpowers", "jimmy", "tenways"]) {
+    if (await publishBrandSpecial(key)) return true;
+  }
+  return false;
+}
+
 // Grelha de mais vendidos (preço atual)
 async function publishBestsellerGrid() {
   const { picks, theme } = pickGrid();
@@ -870,12 +973,18 @@ async function run() {
   if (FORCE_OTTOCAST) {
     // Pedido manual: publica já a grelha Ottocast (mesmo fora de horas) e não publica mais nada neste ciclo
     if (await publishOttocastGrid({ force: true })) { published++; markPosted(); }
+  } else if (BRAND_SPECIALS[FORCE_BRAND]) {
+    // Pedido manual: publica já o especial da marca escolhida (mesmo fora de horas)
+    if (await publishBrandSpecial(FORCE_BRAND, { force: true })) { published++; markPosted(); }
   } else if (!inPostHours()) {
     console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
   } else if (gap < MIN_GAP_MIN) {
     console.log(`Última publicação há ${Math.round(gap)} min — espero pelo próximo ciclo.`);
     runNotes.push(`última publicação há ${Math.round(gap)} min`);
   } else if (await publishOttocastGrid()) {
+    published++;
+    markPosted();
+  } else if (await publishDueBrandSpecial()) {
     published++;
     markPosted();
   } else if (await publishDealOfDayIfDue(candidates)) {

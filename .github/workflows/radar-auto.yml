@@ -19,6 +19,11 @@ on:
         description: 'Publicar já Grelha Especial Ottocast'
         type: boolean
         default: false
+      force_marca:
+        description: 'Publicar já o especial de uma marca'
+        type: choice
+        options: ['', 'allpowers', 'jimmy', 'tenways']
+        default: ''
 
 permissions:
   contents: write
@@ -69,6 +74,7 @@ jobs:
           FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
           PUBLISH_WELCOME: ${{ inputs.publish_welcome && 'true' || 'false' }}
           FORCE_OTTOCAST: ${{ inputs.force_ottocast && 'true' || 'false' }}
+          FORCE_BRAND: ${{ inputs.force_marca || '' }}
         run: node cron-runner.mjs
 
       - name: Guardar histórico de preços
