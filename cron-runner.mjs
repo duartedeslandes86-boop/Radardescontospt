@@ -22,7 +22,7 @@ const AWIN_FEED_URL = process.env.AWIN_FEED_URL || ""; // link do Create-a-Feed 
 // Lojas Awin que não entram no canal (não combinam com Tech/Casa/Desporto)
 const AWIN_EXCLUDE = new RegExp(process.env.AWIN_EXCLUDE || "sinocare", "i");
 // Chat privado do dono: recebe um resumo quando um ciclo não publica nada no canal
-const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
+const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "1411671951"; // Telegram privado do Duarte
 const runNotes = []; // motivos a incluir no resumo privado
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
