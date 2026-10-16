@@ -558,9 +558,10 @@ const GRID_REPEAT_HOURS = 6;     // um produto só volta a uma grelha passadas 6
 const GRID_MIN_REPEAT_HOURS = 2; // …ou 2 horas, se não houver produtos novos suficientes
 const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
 const CAT_TITLES = {
-  electronics: "🔌 TOP TECNOLOGIA", computers: "💻 TOP INFORMÁTICA", videogames: "🎮 TOP GAMING",
+  electronics: "📱 TOP TECNOLOGIA", computers: "💻 TOP INFORMÁTICA", videogames: "🎮 TOP GAMING",
   kitchen: "🍳 TOP COZINHA", home: "🏠 TOP CASA", toys: "🧸 TOP BRINQUEDOS", sports: "⚽ TOP DESPORTO",
-  diy: "🛠️ TOP BRICOLAGE", automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO"
+  tools: "🛠️ TOP BRICOLAGE", appliances: "🔌 TOP ELETRODOMÉSTICOS",
+  automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO"
 };
 
 const minutesSinceLastPost = () =>
@@ -603,10 +604,14 @@ function pickGrid() {
   }
   const byCat = new Map();
   for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
-  // Categoria-tema: a que tem mais produtos, evitando repetir a da publicação anterior
-  const cats = [...byCat.entries()].filter(([c]) => c).sort((a, b) => b[1].length - a[1].length);
-  const theme = (cats.find(([c, l]) => c !== history._meta.lastGridCat && l.length >= 3) ||
-                 cats.find(([, l]) => l.length >= 3) || [null])[0];
+  // Categoria-tema em rotação: a seguir à última usada, a primeira com pelo menos 3 produtos
+  const order = [...new Set(CATEGORIES)];
+  const start = order.indexOf(history._meta.lastGridCat) + 1;
+  let theme = null;
+  for (let i = 0; i < order.length && !theme; i++) {
+    const c = order[(start + i) % order.length];
+    if ((byCat.get(c) || []).length >= 3) theme = c;
+  }
   let picks = theme ? byCat.get(theme).slice(0, GRID_SIZE) : [];
   if (picks.length < GRID_SIZE) {
     const rest = ok.filter(it => !picks.includes(it));
