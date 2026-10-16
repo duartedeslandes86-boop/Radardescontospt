@@ -8,7 +8,7 @@
 // Fontes de terceiros (Chollometro e afins) estão bloqueadas.
 import fs from "fs";
 import { buildCollage } from "./collage.mjs";
-import { fetchAwinCandidates } from "./awin.mjs";
+import { fetchAwinCandidates, fetchOttocastPicks, OTTOCAST_STORE_LINK } from "./awin.mjs";
 import { CATEGORIES, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "1411671951"; // Tel
 const runNotes = []; // motivos a incluir no resumo privado
 const DRY_RUN = process.env.DRY_RUN === "true"; // true = não envia nada, só mostra no log
 const FORCE_TOP_DAY = process.env.FORCE_TOP_DAY === "true";
+const FORCE_OTTOCAST = process.env.FORCE_OTTOCAST === "true"; // publicar já a Grelha Especial Ottocast
 
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
 const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
@@ -622,14 +623,14 @@ function pickGrid() {
 }
 
 // Envia a imagem em grelha (ou álbum, se a imagem falhar) com texto e botões
-async function sendGrid(rows, caption, collageTitle) {
+async function sendGrid(rows, caption, collageTitle, collageSubtitle) {
   const buttons = [];
   for (let i = 0; i < rows.length; i += 2) {
     buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.buttonLabel}`, url: r.affUrl })));
   }
   let ok = false;
   try {
-    const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.imageLabel })), { title: collageTitle });
+    const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.imageLabel })), { title: collageTitle, ...(collageSubtitle ? { subtitle: collageSubtitle } : {}) });
     ok = (await telegramPhotoUpload(image, { caption, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } })).ok;
   } catch (e) {
     console.error(`Grelha: não deu para montar a imagem (${e.message}) — envio em álbum.`);
@@ -637,6 +638,55 @@ async function sendGrid(rows, caption, collageTitle) {
   if (!ok) {
     const media = rows.map((r, i) => ({ type: "photo", media: r.imgUrl, ...(i === 0 ? { caption, parse_mode: "HTML" } : {}) }));
     ok = (await telegram("sendMediaGroup", { media })).ok;
+  }
+  return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Grelha Especial Ottocast (Awin 96499): 1x por dia, no 1.º ciclo a partir das 13h, ou a pedido
+// ---------------------------------------------------------------------------
+const OTTOCAST_HOUR = 13;
+const OTTOCAST_CACHE_DAYS = 3;   // se a loja não responder, usa os últimos preços lidos (até 3 dias)
+
+async function publishOttocastGrid({ force = false } = {}) {
+  if (!force && (lisbonHour < OTTOCAST_HOUR || dailyData.ottocastDate === todayStr)) return false;
+
+  let picks = await fetchOttocastPicks({ feedUrl: AWIN_FEED_URL });
+  const cache = history._meta.ottocastCache;
+  if (picks.length >= 2) {
+    history._meta.ottocastCache = { at: new Date().toISOString(), picks };
+  } else if (cache && (Date.now() - Date.parse(cache.at)) / 86400000 <= OTTOCAST_CACHE_DAYS) {
+    console.log(`Ottocast: loja sem resposta — uso os preços lidos em ${cache.at}.`);
+    picks = cache.picks;
+  }
+  if (picks.length < 2) {
+    console.log("Ottocast: sem produtos suficientes, fica para o próximo ciclo.");
+    runNotes.push("Ottocast: sem produtos suficientes");
+    return false;
+  }
+
+  const rows = picks.slice(0, GRID_SIZE).map(p => {
+    const now = formatEur(p.price);
+    const pct = p.oldPrice > p.price ? Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100) : 0;
+    return {
+      ...p, affUrl: p.url,
+      imageLabel: pct >= 5 ? `${now}  -${pct}%` : now,
+      buttonLabel: pct >= 5 ? `${now} (-${pct}%)` : now,
+      line: pct >= 5 ? `PVP <s>${formatEur(p.oldPrice)}</s> ✅ <b>${now}</b> (-${pct}%)` : `✅ <b>${now}</b>`
+    };
+  });
+
+  let caption = seasonHeader() + `🚗 <b>ESPECIAL AUTO — OTTOCAST</b>\n<i>CarPlay & Android Auto sem fios · loja oficial</i>\n\n`;
+  rows.forEach((r, i) => {
+    caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a>\n      ${r.line}\n`;
+  });
+  caption += `\n🛒 <a href="${OTTOCAST_STORE_LINK}">Ver toda a loja Ottocast</a>\n` +
+    `⚡ <i>Preços da loja oficial para Portugal, podem mudar | Stock limitado</i>\n#auto #tech #ottocast` + seasonFooter();
+
+  const ok = await sendGrid(rows, caption, "ESPECIAL AUTO · OTTOCAST", "Loja oficial Ottocast · CarPlay & Android Auto sem fios");
+  if (ok) {
+    dailyData.ottocastDate = todayStr;
+    console.log(`Grelha Ottocast publicada: ${rows.map(r => `${r.id} ${formatEur(r.price)}`).join(" | ")}`);
   }
   return ok;
 }
@@ -817,11 +867,17 @@ async function run() {
   }
 
   const gap = minutesSinceLastPost();
-  if (!inPostHours()) {
+  if (FORCE_OTTOCAST) {
+    // Pedido manual: publica já a grelha Ottocast (mesmo fora de horas) e não publica mais nada neste ciclo
+    if (await publishOttocastGrid({ force: true })) { published++; markPosted(); }
+  } else if (!inPostHours()) {
     console.log(`Fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h): só registo preços.`);
   } else if (gap < MIN_GAP_MIN) {
     console.log(`Última publicação há ${Math.round(gap)} min — espero pelo próximo ciclo.`);
     runNotes.push(`última publicação há ${Math.round(gap)} min`);
+  } else if (await publishOttocastGrid()) {
+    published++;
+    markPosted();
   } else if (await publishDealOfDayIfDue(candidates)) {
     published++;
   } else if (deals.length) {

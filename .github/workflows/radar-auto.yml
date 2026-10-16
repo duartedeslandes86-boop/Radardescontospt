@@ -15,6 +15,10 @@ on:
         description: 'Publicar e fixar a mensagem de boas-vindas'
         type: boolean
         default: false
+      force_ottocast:
+        description: 'Publicar já Grelha Especial Ottocast'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -64,6 +68,7 @@ jobs:
           AWIN_FEED_URL: ${{ secrets.AWIN_FEED_URL }}
           FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
           PUBLISH_WELCOME: ${{ inputs.publish_welcome && 'true' || 'false' }}
+          FORCE_OTTOCAST: ${{ inputs.force_ottocast && 'true' || 'false' }}
         run: node cron-runner.mjs
 
       - name: Guardar histórico de preços
