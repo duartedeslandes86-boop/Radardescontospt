@@ -722,6 +722,12 @@ const BRAND_SPECIALS = {
     collageTitle: "ESPECIAL CASA · JIMMY", collageSubtitle: "Loja oficial JIMMY · aspiradores sem fios",
     tags: "#casa #tech #jimmy"
   },
+  quatroelementos: {
+    hour: 15, minItems: 2, everyDays: 1,
+    header: "👟 <b>ESPECIAL TÉNIS & STREETWEAR — 4 ELEMENTOS</b>\n<i>Nike, Jordan, adidas, New Balance, Carhartt · loja portuguesa</i>",
+    collageTitle: "ESPECIAL TÉNIS · 4 ELEMENTOS", collageSubtitle: "Loja portuguesa 4 Elementos · ténis e streetwear em promoção",
+    tags: "#tenis #moda #desporto #4elementos"
+  },
   tenways: {
     hour: 11, minItems: 1, everyDays: 7, single: true,
     header: "🚲 <b>ESPECIAL E-BIKE — TENWAYS</b>",
@@ -798,7 +804,7 @@ async function publishBrandSpecial(key, { force = false } = {}) {
 
 // Especiais por ordem de prioridade (1 por ciclo)
 async function publishDueBrandSpecial() {
-  for (const key of ["allpowers", "jimmy", "tenways"]) {
+  for (const key of ["quatroelementos", "allpowers", "jimmy", "tenways"]) {
     if (await publishBrandSpecial(key)) return true;
   }
   return false;

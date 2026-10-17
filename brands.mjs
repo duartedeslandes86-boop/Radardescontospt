@@ -20,6 +20,19 @@ export const BRANDS = {
     accept: p => !/parts|accessor|filter|battery|brush/i.test(`${p.product_type} ${p.title}`),
     model: t => t.split(/\s+/)[0].toUpperCase()
   },
+  quatroelementos: {
+    key: "quatroelementos", name: "4 Elementos", domain: "4elementos.com.pt", mid: "124836",
+    minPct: 20, maxPct: 70, minPrice: 40, maxPages: 8,
+    // Só ténis, botas e casacos/camisolas de marca (sem meias, gorros, acessórios ou limpeza)
+    accept: p => /^(t[eé]nis|zapatillas|sapatilhas|botas|moletons|sudaderas|jaquetas|chaquetas|casacos|abrigos)$/i.test(p.product_type || "") &&
+      // ténis/botas: só com tamanho de adulto (39–48) disponível — os de criança têm tamanhos 16–38
+      (!/^(t[eé]nis|zapatillas|sapatilhas|botas)$/i.test(p.product_type || "") ||
+        (p.variants || []).some(v => v.available && (n => n >= 39 && n <= 48)(parseFloat(String(v.title).replace(",", "."))))) &&
+      // sem tamanhos de criança/bebé (J, GS, PS, TD, IV, Kids, Baby…)
+      !/\b(J|GS|PS|TD|IV|PV|BG|BP|TDE|KIDS?|BABY|INFANT|JUNIOR|CRIAN[CÇ]A|NI[ÑN]O|BEB[EÉ])\b/i.test(`${p.title} ${(p.tags || []).join(" ")}`),
+    // Um por modelo: marca + 2 palavras seguintes ("Nike Air Max", "adidas Campus 00S")
+    model: t => t.toUpperCase().split(/\s+/).slice(0, 3).join(" ")
+  },
   tenways: {
     key: "tenways", name: "Tenways", domain: "www.tenways.com", mid: "72399",
     minPct: 10, maxPct: 50, minPrice: 500,
@@ -44,6 +57,7 @@ export function brandTitle(brand, title) {
   let t = String(title || "").replace(/\s+/g, " ").trim();
   if (brand.key === "jimmy") { for (const [re, pt] of EN_PT) t = t.replace(re, pt); t = `JIMMY ${t}`; }
   if (brand.key === "tenways" && !/^tenways/i.test(t)) t = `Tenways ${t}`;
+  t = t.replace(/^(\S+)\s+\1\b/i, "$1"); // "Jordan Jordan 3 Retro" → "Jordan 3 Retro"
   // "Kit Gerador Solar 2400W (S2000 Pro + Painel SE100)" → mantém o modelo que está entre parênteses
   if (brand.key === "allpowers") t = t.replace(/\s*\((.+?)\)/, " — $1");
   return shortenTitle(t, 70);
@@ -78,7 +92,7 @@ const pctOf = (price, old) => (old > price ? Math.round(((old - price) / old) * 
 export async function fetchBrandDeals(brand, { max = 4, skip = () => false } = {}) {
   const base = `https://${brand.domain}`;
   const products = [];
-  for (let page = 1; page <= 2; page++) {
+  for (let page = 1; page <= (brand.maxPages || 2); page++) {
     const d = await getJson(`${base}/products.json?limit=250&page=${page}`);
     products.push(...(d.products || []));
     if ((d.products || []).length < 250) break;
