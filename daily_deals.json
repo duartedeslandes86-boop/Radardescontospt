@@ -1,6 +1,17 @@
 {
   "date": "2026-10-17",
   "lastSummaryDate": "2026-10-16",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "tenways:cgo600",
+      "store": "Tenways",
+      "title": "TENWAYS CGO600",
+      "currentPrice": "1.099,00€",
+      "oldPrice": "1.299,00€",
+      "discountPct": 15,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=72399&awinaffid=3124493&ued=https%3A%2F%2Fwww.tenways.com%2Fproducts%2Fcgo600&clickref=tg-tenways",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0563/3926/7733/files/Greygreen-1.webp?v=1758781276&width=1200&format=pjpg"
+    }
+  ],
   "ottocastDate": "2026-10-17"
 }
