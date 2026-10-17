@@ -616,13 +616,10 @@ function pickGrid() {
     const c = order[(start + i) % order.length];
     if ((byCat.get(c) || []).length >= 3) theme = c;
   }
-  let picks = theme ? byCat.get(theme).slice(0, GRID_SIZE) : [];
-  if (picks.length < GRID_SIZE) {
-    const rest = ok.filter(it => !picks.includes(it));
-    picks = picks.concat(rest.slice(0, GRID_SIZE - picks.length));
-  }
-  const sameCat = theme && picks.filter(p => p.cat === theme).length >= 3;
-  return { picks, theme: sameCat ? theme : null };
+  // Com tema: só produtos dessa categoria (3 ou 4), para o título "TOP X" bater certo com o conteúdo.
+  // Sem tema: grelha mista "MAIS VENDIDOS".
+  if (theme) return { picks: byCat.get(theme).slice(0, GRID_SIZE), theme };
+  return { picks: ok.slice(0, GRID_SIZE), theme: null };
 }
 
 // Envia a imagem em grelha (ou álbum, se a imagem falhar) com texto e botões
