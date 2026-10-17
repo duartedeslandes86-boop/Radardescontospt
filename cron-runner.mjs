@@ -106,6 +106,7 @@ if (!dailyData || !Array.isArray(dailyData.deals)) dailyData = { date: "", lastS
 if (dailyData.date !== todayStr) {
   dailyData.date = todayStr;
   dailyData.deals = [];
+  dailyData.cheapSlots = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -600,9 +601,17 @@ function hoursSinceFeatured(asin) {
 const recentlyFeatured = asin => hoursSinceFeatured(asin) < GRID_REPEAT_HOURS;
 
 // Escolhe até 4 mais vendidos: tenta uma categoria-tema (diferente da última), completa com outras
-function pickGrid() {
+// Grelha "ACHADOS ATÉ 15€": produtos baratos (preço PT entre 5 e 15€), 2x por dia
+const CHEAP_MIN = 5, CHEAP_MAX = 15;
+const CHEAP_HOURS = [12, 20];
+
+function pickGrid({ cheap = false } = {}) {
+  const inRange = it => {
+    const pt = it.price * VAT_ES_TO_PT;
+    return cheap ? pt >= CHEAP_MIN && pt <= CHEAP_MAX : it.price >= GRID_MIN_PRICE;
+  };
   const eligible = productPool().filter(it =>
-    it.imgUrl && it.price >= GRID_MIN_PRICE && (!it.rating || it.rating >= 4.2) && !wasSent(it.asin) &&
+    it.imgUrl && inRange(it) && (!it.rating || it.rating >= 4.2) && !wasSent(it.asin) &&
     hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
     !isLowValue(it.title) && !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
   );
@@ -612,6 +621,14 @@ function pickGrid() {
     const older = eligible.filter(it => recentlyFeatured(it.asin))
       .sort((a, b) => hoursSinceFeatured(b.asin) - hoursSinceFeatured(a.asin));
     ok = ok.concat(older.slice(0, GRID_SIZE - ok.length));
+  }
+  if (cheap) {
+    // Variedade: primeiro um por categoria (melhor avaliação), depois completa
+    const sorted = [...ok].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    const picks = [], cats = new Set();
+    for (const it of sorted) if (!cats.has(it.cat) && picks.length < GRID_SIZE) { picks.push(it); cats.add(it.cat); }
+    for (const it of sorted) if (!picks.includes(it) && picks.length < GRID_SIZE) picks.push(it);
+    return { picks, theme: null };
   }
   const byCat = new Map();
   for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
@@ -822,7 +839,15 @@ async function publishBestsellerGrid() {
     bestsellerPaced = true;
     return false;
   }
-  const { picks, theme } = pickGrid();
+  // Às 12h e às 20h (1x cada) a grelha é de achados baratos; se não houver pelo menos 2, segue a normal
+  const cheapSlot = [...CHEAP_HOURS].reverse().find(h => lisbonHour >= h && lisbonHour < h + 2);
+  const cheapDue = cheapSlot !== undefined && !(dailyData.cheapSlots || []).includes(cheapSlot);
+  let { picks, theme } = cheapDue ? pickGrid({ cheap: true }) : pickGrid();
+  let cheap = cheapDue && picks.length >= 2;
+  if (cheapDue && !cheap) {
+    console.log(`Achados até ${CHEAP_MAX}€: só ${picks.length} produto(s) — grelha normal.`);
+    ({ picks, theme } = pickGrid());
+  }
   if (picks.length < 2) {
     console.log(`Grelha: só ${picks.length} produto(s) elegíveis.`);
     runNotes.push(`só ${picks.length} produto(s) elegíveis para a grelha`);
@@ -836,23 +861,25 @@ async function publishBestsellerGrid() {
       affUrl: `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`
     };
   });
-  const head = theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
-  let caption = seasonHeader() + `<b>${head} — AMAZON ES</b>\n<i>Os mais vendidos agora · preços com IVA PT incluído</i>\n\n`;
+  const head = cheap ? `💸 ACHADOS ATÉ ${CHEAP_MAX}€` : theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
+  const sub = cheap ? "Coisas úteis e baratas, das mais vendidas · preços com IVA PT incluído" : "Os mais vendidos agora · preços com IVA PT incluído";
+  let caption = seasonHeader() + `<b>${head} — AMAZON ES</b>\n<i>${sub}</i>\n\n`;
   rows.forEach((r, i) => {
     caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a> — <b>${r.imageLabel}</b>` +
       (r.rating ? ` · ⭐${String(r.rating).replace(".", ",")}` : "") + `\n`;
   });
-  const tags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" ")))].join(" ");
+  const tags = [...new Set((cheap ? ["#achados", "#barato"] : []).concat(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" "))))].join(" ");
   caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${tags}` + seasonFooter();
 
-  const collageTitle = SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : (theme ? head.replace(/^\S+\s/, "") : "MAIS VENDIDOS HOJE");
+  const collageTitle = SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : ((cheap || theme) ? head.replace(/^\S+\s/, "") : "MAIS VENDIDOS HOJE");
   const ok = await sendGrid(rows, caption, collageTitle);
   if (ok) {
     history._meta.featuredAt = history._meta.featuredAt || {};
     for (const r of rows) { history._meta.featured[r.asin] = todayStr; history._meta.featuredAt[r.asin] = new Date().toISOString(); }
-    history._meta.lastGridCat = theme || "";
+    if (cheap) dailyData.cheapSlots = [...(dailyData.cheapSlots || []), cheapSlot];
+    else history._meta.lastGridCat = theme || "";
     history._meta.lastBestsellerAt = new Date().toISOString();
-    console.log(`Grelha publicada (${theme || "mista"}${rows.some(r => r.fromHistory) ? ", com reserva" : ""}): ${rows.map(r => `${r.asin} ${r.imageLabel}`).join(" | ")}`);
+    console.log(`Grelha publicada (${cheap ? `achados até ${CHEAP_MAX}€` : theme || "mista"}${rows.some(r => r.fromHistory) ? ", com reserva" : ""}): ${rows.map(r => `${r.asin} ${r.imageLabel}`).join(" | ")}`);
   }
   return ok;
 }
