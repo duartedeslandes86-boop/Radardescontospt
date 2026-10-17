@@ -696,7 +696,8 @@ async function publishOttocastGrid({ force = false } = {}) {
 
   const ok = await sendGrid(rows, caption, "ESPECIAL AUTO · OTTOCAST", "Loja oficial Ottocast · CarPlay & Android Auto sem fios");
   if (ok) {
-    dailyData.ottocastDate = todayStr;
+    // Publicação a pedido (fora do horário) não conta como a do dia: a das 13h sai na mesma
+    if (!force || inPostHours()) dailyData.ottocastDate = todayStr;
     console.log(`Grelha Ottocast publicada: ${rows.map(r => `${r.id} ${formatEur(r.price)}`).join(" | ")}`);
   }
   return ok;
