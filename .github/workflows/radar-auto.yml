@@ -22,7 +22,7 @@ on:
       force_marca:
         description: 'Publicar já o especial de uma marca'
         type: choice
-        options: ['', 'allpowers', 'jimmy', 'tenways']
+        options: ['', 'allpowers', 'quatroelementos', 'jimmy', 'tenways']
         default: ''
 
 permissions:
