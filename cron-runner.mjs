@@ -611,10 +611,14 @@ function pickGrid() {
   // Categoria-tema em rotação: a seguir à última usada, a primeira com pelo menos 3 produtos
   const order = [...new Set(CATEGORIES)];
   const start = order.indexOf(history._meta.lastGridCat) + 1;
+  // Preferência: categoria com 4 produtos; se nenhuma tiver 4, a primeira com 3; senão, com 2
   let theme = null;
-  for (let i = 0; i < order.length && !theme; i++) {
-    const c = order[(start + i) % order.length];
-    if ((byCat.get(c) || []).length >= 3) theme = c;
+  for (const need of [GRID_SIZE, 3, 2]) {
+    for (let i = 0; i < order.length && !theme; i++) {
+      const c = order[(start + i) % order.length];
+      if ((byCat.get(c) || []).length >= need) theme = c;
+    }
+    if (theme) break;
   }
   // Com tema: só produtos dessa categoria (3 ou 4), para o título "TOP X" bater certo com o conteúdo.
   // Sem tema: grelha mista "MAIS VENDIDOS".
