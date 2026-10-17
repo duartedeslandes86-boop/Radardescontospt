@@ -44,7 +44,8 @@ const HISTORY_DAYS = 30;          // janela do preço de referência
 const MIN_PRIOR_DAYS = 2;         // dias anteriores com preço registado antes de publicar
 const MAX_DISCOUNT_PCT = 80;      // acima disto é quase sempre erro de leitura
 const HISTORY_MAX_ASINS = 4000;
-const CATEGORIES_PER_RUN = Number(process.env.CATEGORIES_PER_RUN || 3);
+// 1 categoria por ciclo (3 ciclos/hora → todas as categorias várias vezes por dia) = menos captchas da Amazon
+const CATEGORIES_PER_RUN = Number(process.env.CATEGORIES_PER_RUN || 1);
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 // Fontes bloqueadas: nenhum link, imagem ou oferta destes sites é aceite
@@ -399,7 +400,7 @@ function pruneHistory() {
 let lastSeenItems = []; // produtos lidos neste ciclo, pela ordem do ranking
 
 async function fetchCandidateDeals() {
-  const start = history._meta.nextCategory % CATEGORIES.length;
+  const start = (history._meta.nextCategory || 0) % CATEGORIES.length;
   const cats = Array.from({ length: Math.min(CATEGORIES_PER_RUN, CATEGORIES.length) }, (_, i) => CATEGORIES[(start + i) % CATEGORIES.length]);
   history._meta.nextCategory = (start + cats.length) % CATEGORIES.length;
 
@@ -517,6 +518,12 @@ function historyNote(refDays) {
   return refDays >= HISTORY_DAYS
     ? `📉 <i>Preço mais baixo dos últimos 30 dias</i>\n`
     : `📉 <i>Mais barato do que em qualquer dia que registámos (${refDays} dias)</i>\n`;
+}
+
+// Marca de origem nos links Awin (aparece no relatório da Awin como "Click Ref"): sabes que post gerou a venda
+function withClickref(url, ref) {
+  if (!/awin1\.com\/cread\.php/.test(url || "") || /[?&]clickref=/.test(url)) return url;
+  return `${url}&clickref=${encodeURIComponent(ref)}`;
 }
 
 const seasonHeader = () => (SEASON?.label ? `<b>${SEASON.label}</b>\n` : "");
@@ -673,7 +680,7 @@ async function publishOttocastGrid({ force = false } = {}) {
     const now = formatEur(p.price);
     const pct = p.oldPrice > p.price ? Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100) : 0;
     return {
-      ...p, affUrl: p.url,
+      ...p, affUrl: withClickref(p.url, "tg-ottocast-grelha"),
       imageLabel: pct >= 5 ? `${now}  -${pct}%` : now,
       buttonLabel: pct >= 5 ? `${now} (-${pct}%)` : now,
       line: pct >= 5 ? `PVP <s>${formatEur(p.oldPrice)}</s> ✅ <b>${now}</b> (-${pct}%)` : `✅ <b>${now}</b>`
@@ -684,7 +691,7 @@ async function publishOttocastGrid({ force = false } = {}) {
   rows.forEach((r, i) => {
     caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a>\n      ${r.line}\n`;
   });
-  caption += `\n🛒 <a href="${OTTOCAST_STORE_LINK}">Ver toda a loja Ottocast</a>\n` +
+  caption += `\n🛒 <a href="${withClickref(OTTOCAST_STORE_LINK, "tg-ottocast-loja")}">Ver toda a loja Ottocast</a>\n` +
     `⚡ <i>Preços da loja oficial para Portugal, podem mudar | Stock limitado</i>\n#auto #tech #ottocast` + seasonFooter();
 
   const ok = await sendGrid(rows, caption, "ESPECIAL AUTO · OTTOCAST", "Loja oficial Ottocast · CarPlay & Android Auto sem fios");
@@ -753,6 +760,7 @@ async function publishBrandSpecial(key, { force = false } = {}) {
   let ok;
   if (cfg.single) {
     const p = picks[0];
+    p.url = withClickref(p.url, `tg-${key}`);
     ok = !!(await publishDeal(p.url, brand.name, p.title,
       { oldPrice: formatEur(p.oldPrice), currentPrice: formatEur(p.price), discountPct: p.pct }, p.imgUrl, false,
       { tags: cfg.tags, header: cfg.header }));
@@ -760,14 +768,14 @@ async function publishBrandSpecial(key, { force = false } = {}) {
     const rows = picks.map(p => {
       const now = formatEur(p.price);
       return {
-        ...p, affUrl: p.url,
+        ...p, affUrl: withClickref(p.url, `tg-${key}-grelha`),
         imageLabel: `${now}  -${p.pct}%`, buttonLabel: `${now} (-${p.pct}%)`,
         line: `PVP <s>${formatEur(p.oldPrice)}</s> ✅ <b>${now}</b> (-${p.pct}%)`
       };
     });
     let caption = seasonHeader() + `${cfg.header}\n\n`;
     rows.forEach((r, i) => { caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a>\n      ${r.line}\n`; });
-    caption += `\n🛒 <a href="${brandStoreLink(brand)}">Ver toda a loja ${escapeHtml(brand.name)}</a>\n` +
+    caption += `\n🛒 <a href="${withClickref(brandStoreLink(brand), `tg-${key}-loja`)}">Ver toda a loja ${escapeHtml(brand.name)}</a>\n` +
       `⚡ <i>Preços da loja oficial para Portugal, podem mudar | Stock limitado</i>\n${cfg.tags}` + seasonFooter();
     ok = await sendGrid(rows, caption, cfg.collageTitle, cfg.collageSubtitle);
   }
@@ -796,7 +804,17 @@ async function publishDueBrandSpecial() {
 }
 
 // Grelha de mais vendidos (preço atual)
+// "Mais vendidos" (sem desconto) só de hora a hora; descontos reais e especiais saem sempre que aparecem
+const BESTSELLER_EVERY_MIN = 55;
+let bestsellerPaced = false; // ciclo sem post só por esperar a hora → não é problema, não avisa no privado
+
 async function publishBestsellerGrid() {
+  const lastBs = history._meta.lastBestsellerAt ? (Date.now() - Date.parse(history._meta.lastBestsellerAt)) / 60000 : Infinity;
+  if (lastBs < BESTSELLER_EVERY_MIN) {
+    console.log(`Mais vendidos: última grelha há ${Math.round(lastBs)} min — próxima daqui a ${Math.ceil(BESTSELLER_EVERY_MIN - lastBs)} min.`);
+    bestsellerPaced = true;
+    return false;
+  }
   const { picks, theme } = pickGrid();
   if (picks.length < 2) {
     console.log(`Grelha: só ${picks.length} produto(s) elegíveis.`);
@@ -826,6 +844,7 @@ async function publishBestsellerGrid() {
     history._meta.featuredAt = history._meta.featuredAt || {};
     for (const r of rows) { history._meta.featured[r.asin] = todayStr; history._meta.featuredAt[r.asin] = new Date().toISOString(); }
     history._meta.lastGridCat = theme || "";
+    history._meta.lastBestsellerAt = new Date().toISOString();
     console.log(`Grelha publicada (${theme || "mista"}${rows.some(r => r.fromHistory) ? ", com reserva" : ""}): ${rows.map(r => `${r.asin} ${r.imageLabel}`).join(" | ")}`);
   }
   return ok;
@@ -1019,7 +1038,7 @@ async function run() {
   const topPosted = await publishDailyTopIfDue();
 
   // Resumo privado para o dono quando nada foi publicado no canal
-  if (ADMIN_CHAT_ID && published === 0 && !topPosted) {
+  if (ADMIN_CHAT_ID && published === 0 && !topPosted && !bestsellerPaced) {
     const reasons = [];
     if (!inPostHours()) reasons.push(`fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h)`);
     reasons.push(`${lastSeenItems.length} produtos lidos, ${candidates.length} abaixo do preço do histórico`);
