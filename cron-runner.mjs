@@ -107,6 +107,7 @@ if (dailyData.date !== todayStr) {
   dailyData.date = todayStr;
   dailyData.deals = [];
   dailyData.cheapSlots = [];
+  dailyData.recordAlerts = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -639,7 +640,11 @@ function pickGrid({ cheap = false } = {}) {
   const start = order.indexOf(history._meta.lastGridCat) + 1;
   // Preferência: categoria com 4 produtos; se nenhuma tiver 4, a primeira com 3; senão, com 2
   let theme = null;
+  // Categoria mais votada na sondagem: entra de 3 em 3 grelhas (se tiver pelo menos 3 produtos)
+  const fav = favCat();
+  if (fav && fav !== history._meta.lastGridCat && (history._meta.gridsSinceFav ?? 99) >= 2 && (byCat.get(fav) || []).length >= 3) theme = fav;
   for (const need of [GRID_SIZE, 3, 2]) {
+    if (theme) break;
     for (let i = 0; i < order.length && !theme; i++) {
       const c = order[(start + i) % order.length];
       if ((byCat.get(c) || []).length >= need) theme = c;
@@ -880,6 +885,7 @@ async function publishBestsellerGrid() {
     for (const r of rows) { history._meta.featured[r.asin] = todayStr; history._meta.featuredAt[r.asin] = new Date().toISOString(); }
     if (cheap) dailyData.cheapSlots = [...(dailyData.cheapSlots || []), cheapSlot];
     else history._meta.lastGridCat = theme || "";
+    if (!cheap) history._meta.gridsSinceFav = theme && theme === favCat() ? 0 : (history._meta.gridsSinceFav ?? 0) + 1;
     history._meta.lastBestsellerAt = new Date().toISOString();
     console.log(`Grelha publicada (${cheap ? `achados até ${CHEAP_MAX}€` : theme || "mista"}${rows.some(r => r.fromHistory) ? ", com reserva" : ""}): ${rows.map(r => `${r.asin} ${r.imageLabel}`).join(" | ")}`);
   }
@@ -955,6 +961,274 @@ async function publishDealOfDayIfDue(candidates) {
   return ok;
 }
 
+// ---------------------------------------------------------------------------
+// Interação com o canal (para dar movimento sem encher de grelhas):
+//  1) Sondagem do dia (13h): dia sim "Qual destes compravas?", dia não "Que categoria queres ver mais?"
+//     → a categoria mais votada aparece mais vezes nas grelhas durante 7 dias.
+//  2) Caça-pedidos (domingo, 11h): os seguidores dizem o que procuram (privado do bot ou comentários);
+//     quando um produto pedido aparecer abaixo do preço registado, sai um post 🎯.
+//  3) As melhores da semana (sexta, 19h): maiores descontos publicados nos últimos 7 dias + mais votado.
+//  4) Alerta "mínimo do Radar": desconto real grande com histórico longo → post sozinho com 🚨.
+// ---------------------------------------------------------------------------
+const POLL_HOUR = 13;
+const PEDIDOS_WEEKDAY = 0, PEDIDOS_HOUR = 11;  // domingo
+const WEEKLY_WEEKDAY = 5, WEEKLY_HOUR = 19;    // sexta-feira
+const RECORD_MIN_DAYS = 14, RECORD_MIN_PCT = 25, RECORD_MAX_PER_DAY = 3;
+const PEDIDO_DAYS = 30, PEDIDOS_MAX = 200;
+const FAV_CAT_DAYS = 7;
+const weekdayLisbon = new Date(todayStr + "T12:00:00Z").getUTCDay();
+const addDays = (d, n) => new Date(Date.parse(d + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const cutText = (s, max) => (s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s);
+
+// Chamadas ao Telegram que não são publicações no canal (não contam para o estado do ciclo)
+async function tgRaw(method, payload = {}) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(20000)
+    });
+    return await res.json().catch(() => ({ ok: false }));
+  } catch (e) {
+    return { ok: false, description: e.message };
+  }
+}
+
+// Categoria preferida pelos seguidores (última sondagem de categorias), válida durante 7 dias
+function favCat() {
+  const f = history._meta.favCat;
+  return f && f.until >= todayStr && CATEGORIES.includes(f.cat) ? f.cat : null;
+}
+
+// Fecha a sondagem anterior e guarda o resultado
+async function closePreviousPoll() {
+  const p = history._meta.poll;
+  if (!p?.messageId || p.closed) return;
+  p.closed = true;
+  if (DRY_RUN) return;
+  const r = await tgRaw("stopPoll", { chat_id: CHAT_ID, message_id: p.messageId });
+  const opts = r.result?.options;
+  if (!r.ok || !opts) { console.log(`Sondagem anterior: não deu para fechar (${r.description || "sem resposta"}).`); return; }
+  const total = opts.reduce((s, o) => s + o.voter_count, 0);
+  if (!total) { console.log("Sondagem anterior fechada sem votos."); return; }
+  const best = opts.reduce((bi, o, i) => (o.voter_count > opts[bi].voter_count ? i : bi), 0);
+  if (p.type === "cat") {
+    history._meta.favCat = { cat: p.keys[best], until: addDays(todayStr, FAV_CAT_DAYS) };
+    console.log(`Sondagem de categorias: ganhou "${p.keys[best]}" (${opts[best].voter_count}/${total} votos).`);
+  } else {
+    history._meta.pollWinners = [...(history._meta.pollWinners || []),
+      { date: p.date, title: p.titles[best], url: p.urls[best], votes: opts[best].voter_count, total }].slice(-14);
+    console.log(`Sondagem de produtos: ganhou "${p.titles[best]}" (${opts[best].voter_count}/${total} votos).`);
+  }
+}
+
+async function publishPollIfDue() {
+  if (!inPostHours() || lisbonHour < POLL_HOUR || history._meta.pollDate === todayStr) return false;
+  await closePreviousPoll();
+
+  let poll = null;
+  // Dias pares: produtos (dos que já saíram hoje nas grelhas, de categorias diferentes)
+  if (daysBetween("2026-01-01", todayStr) % 2 === 0) {
+    const featuredToday = new Set(Object.entries(history._meta.featured || {}).filter(([, d]) => d === todayStr).map(([a]) => a));
+    const pool = productPool()
+      .filter(it => it.title && it.price >= GRID_MIN_PRICE && !isLowValue(it.title) && !isUsedOrRefurbished(it.title) && !wasSent(it.asin))
+      .sort((a, b) => (featuredToday.has(b.asin) - featuredToday.has(a.asin)) || (b.rating || 0) - (a.rating || 0));
+    const picks = [], cats = new Set();
+    for (const it of pool) if (!cats.has(it.cat) && picks.length < 4) { picks.push(it); cats.add(it.cat); }
+    if (picks.length >= 3) {
+      const titles = picks.map(it => shortenTitle(cleanAndTranslateTitle(it.title), 60));
+      poll = {
+        type: "prod",
+        question: "🗳️ SONDAGEM DO DIA — Qual destes compravas?",
+        options: picks.map((it, i) => cutText(`${titles[i]} — ${formatEur(it.price * VAT_ES_TO_PT)}`, 100)),
+        keys: picks.map(it => it.asin), titles,
+        urls: picks.map(it => `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`)
+      };
+    }
+  }
+  // Dias ímpares (ou sem produtos suficientes): categorias
+  if (!poll) {
+    const keys = CATEGORIES.filter(c => CAT_TITLES[c]).slice(0, 10);
+    poll = {
+      type: "cat",
+      question: "🗳️ SONDAGEM DO DIA — Que categoria queres ver mais no Radar? (a mais votada aparece mais vezes esta semana)",
+      options: keys.map(c => CAT_TITLES[c].replace(" TOP ", " ")), keys
+    };
+  }
+
+  const r = await telegram("sendPoll", {
+    question: poll.question, options: poll.options.map(text => ({ text })), is_anonymous: true
+  });
+  if (!r.ok) return false;
+  history._meta.poll = { messageId: r.result?.message_id || null, date: todayStr, type: poll.type, keys: poll.keys, titles: poll.titles || [], urls: poll.urls || [] };
+  history._meta.pollDate = todayStr;
+  console.log(`Sondagem do dia publicada (${poll.type === "cat" ? "categorias" : "produtos"}).`);
+  return true;
+}
+
+// Palavras-chave de um pedido ("quero uma airfryer xiaomi barata" → ["airfryer", "xiaomi"])
+const PEDIDO_STOP = new Set(("de da do das dos para com sem um uma uns umas o a os as e ou em no na nos nas que " +
+  "mais menos barato barata baratos baratas preco precos promo promocao promocoes desconto descontos quero queria " +
+  "procuro procura alguem algum alguma bom boa boas bons melhor ola obrigado por favor pf tipo coisa algo " +
+  "el la los las un una con y por").split(" "));
+function pedidoKeywords(text) {
+  return [...new Set(norm(text).split(" ").filter(w => (w.length >= 3 || /\d/.test(w)) && !PEDIDO_STOP.has(w)))].slice(0, 4);
+}
+function matchesPedido(p, title) {
+  const t = " " + norm(title) + " " + norm(cleanAndTranslateTitle(title)) + " ";
+  return p.kw.length > 0 && p.kw.every(k => t.includes(" " + k));
+}
+const activePedidos = () => (history._meta.pedidos || []).filter(p => !p.done && daysBetween(p.date, todayStr) <= PEDIDO_DAYS);
+
+let botUsername = null;
+async function getBotUsername() {
+  if (botUsername) return botUsername;
+  if (DRY_RUN) return (botUsername = "o_bot_do_radar");
+  const r = await tgRaw("getMe");
+  botUsername = r.result?.username || null;
+  return botUsername;
+}
+
+// Lê as mensagens novas enviadas ao bot (privado) ou no grupo de comentários do canal
+async function collectPedidos() {
+  if (DRY_RUN || !BOT_TOKEN) return;
+  const r = await tgRaw("getUpdates", { offset: history._meta.updOffset || 0, timeout: 0, allowed_updates: ["message"] });
+  if (!r.ok) { console.log(`Pedidos: não deu para ler mensagens (${r.description || "sem resposta"}).`); return; }
+  // Grupo de comentários ligado ao canal (pergunta ao Telegram uma vez; depois atualiza ao domingo)
+  if (history._meta.linkedChatId === undefined) {
+    const chat = await tgRaw("getChat", { chat_id: CHAT_ID });
+    if (chat.ok) history._meta.linkedChatId = chat.result?.linked_chat_id || null;
+  }
+  const linked = history._meta.linkedChatId || null;
+  const fresh = [];
+  for (const u of Array.isArray(r.result) ? r.result : []) {
+    history._meta.updOffset = u.update_id + 1;
+    const m = u.message;
+    if (!m?.text || m.from?.is_bot) continue;
+    const isPrivate = m.chat?.type === "private";
+    if (!isPrivate && !(linked && m.chat?.id === linked)) continue;
+    const text = m.text.trim();
+    if (text.startsWith("/")) {
+      if (isPrivate) await tgRaw("sendMessage", { chat_id: m.chat.id, parse_mode: "HTML",
+        text: "👋 Olá! Escreve aqui o produto que procuras (ex.: <i>airfryer xiaomi</i>, <i>ps5</i>, <i>berbequim bosch</i>).\n\nSe aparecer abaixo do preço mais baixo que registámos, publicamos no canal @radardescontos_pt com 🎯." });
+      continue;
+    }
+    const kw = pedidoKeywords(text);
+    if (text.length < 3 || text.length > 120 || !kw.length) continue;
+    const pedidos = (history._meta.pedidos ||= []);
+    if (pedidos.some(p => !p.done && p.kw.join(" ") === kw.join(" "))) continue; // já pedido
+    // Quem pediu: para o identificar no post 🎯 e o avisar diretamente quando baixar
+    pedidos.push({ q: cutText(text.replace(/\s+/g, " "), 60), kw, date: todayStr,
+      uid: m.from?.id || null, name: cutText(m.from?.first_name || "um seguidor", 30), user: m.from?.username || null,
+      chat: m.chat.id, msg: m.message_id, priv: isPrivate });
+    fresh.push(text);
+    if (isPrivate) await tgRaw("sendMessage", { chat_id: m.chat.id, parse_mode: "HTML",
+      text: `✅ Anotado: «${escapeHtml(cutText(text, 60))}»\n\nFicamos de olho durante 30 dias. Se baixar de preço, avisamos-te aqui e publicamos no canal @radardescontos_pt com 🎯 e o teu nome.\n<i>Vigiamos os mais vendidos da Amazon ES e as lojas parceiras — não conseguimos garantir todos os produtos.</i>` });
+  }
+  history._meta.pedidos = (history._meta.pedidos || [])
+    .filter(p => daysBetween(p.date, todayStr) <= PEDIDO_DAYS).slice(-PEDIDOS_MAX);
+  if (fresh.length) {
+    console.log(`Pedidos novos: ${fresh.length}.`);
+    await sendAdmin(`🎯 <b>Radar — ${fresh.length} pedido(s) novo(s)</b>\n\n` + fresh.map(t => `• ${escapeHtml(cutText(t, 80))}`).join("\n"));
+  }
+}
+
+async function publishPedidosIfDue() {
+  if (weekdayLisbon !== PEDIDOS_WEEKDAY || !inPostHours() || lisbonHour < PEDIDOS_HOUR || history._meta.pedidosPostDate === todayStr) return false;
+  const bot = await getBotUsername();
+  if (!bot) return false;
+  // Grupo de comentários ligado ao canal (se houver, também aceitamos pedidos lá)
+  if (!DRY_RUN) {
+    const chat = await tgRaw("getChat", { chat_id: CHAT_ID });
+    history._meta.linkedChatId = chat.result?.linked_chat_id || null;
+  }
+  const comments = !!history._meta.linkedChatId;
+  const text =
+    `🎯 <b>CAÇA-PEDIDOS DE DOMINGO</b>\n\n` +
+    `Andas de olho nalguma coisa? Diz-nos o que procuras e o Radar fica atento ao preço durante 30 dias.\n\n` +
+    `✍️ Envia o nome do produto ao @${bot}${comments ? " ou escreve aqui nos comentários" : ""}\n` +
+    `<i>Ex.: airfryer xiaomi · ps5 · berbequim bosch · robot aspirador</i>\n\n` +
+    `🔔 Se aparecer abaixo do preço mais baixo que registámos, publicamos aqui com 🎯.\n` +
+    `<i>Vigiamos os mais vendidos da Amazon ES e as lojas parceiras — não conseguimos garantir todos os produtos.</i>`;
+  const r = await telegram("sendMessage", { text, parse_mode: "HTML", disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: [[{ text: "✍️ Fazer um pedido", url: `https://t.me/${bot}?start=pedido` }]] } });
+  if (!r.ok) return false;
+  history._meta.pedidosPostDate = todayStr;
+  console.log("Caça-pedidos publicado.");
+  return true;
+}
+
+// Nome de quem pediu: @utilizador, ou o primeiro nome com ligação ao perfil
+function whoAsked(p) {
+  if (p.user) return `@${escapeHtml(p.user)}`;
+  if (p.uid) return `<a href="tg://user?id=${p.uid}">${escapeHtml(p.name)}</a>`;
+  return escapeHtml(p.name || "um seguidor");
+}
+
+// Avisa quem pediu: em privado (se pediu ao bot) ou em resposta ao comentário no grupo
+async function notifyRequester(p, d) {
+  if (DRY_RUN || !p.chat) return;
+  const text = `🎯 <b>Encontrámos o teu pedido!</b>\n«${escapeHtml(p.q)}»\n\n📦 ${escapeHtml(d.title)}\n` +
+    `❌ <s>${d.prices.oldPrice}</s> ✅ <b>${d.prices.currentPrice}</b> (-${d.prices.discountPct}%)\n\n👉 <a href="${d.url}">Ver oferta na ${escapeHtml(d.store)}</a>`;
+  const r = await tgRaw("sendMessage", { chat_id: p.chat, text, parse_mode: "HTML",
+    ...(p.priv ? {} : { reply_to_message_id: p.msg, allow_sending_without_reply: true }) });
+  console.log(r.ok ? `Pedido: avisei quem pediu («${p.q}»).` : `Pedido: não deu para avisar quem pediu (${r.description}).`);
+}
+
+// Desconto especial para sair sozinho: primeiro um pedido de seguidor, depois um "mínimo do Radar"
+function pickSpecialDeal(deals) {
+  for (const p of activePedidos()) {
+    const d = deals.find(x => matchesPedido(p, x.title));
+    if (d) return { deal: d, pedido: p,
+      header: `🎯 <b>PEDIDO ENCONTRADO!</b>\nPedido de ${whoAsked(p)}: «${escapeHtml(p.q)}» — baixou de preço 👇` };
+  }
+  if ((dailyData.recordAlerts || 0) < RECORD_MAX_PER_DAY) {
+    const d = deals.find(x => (x.refDays || 0) >= RECORD_MIN_DAYS && x.prices.discountPct >= RECORD_MIN_PCT);
+    if (d) return { deal: d, record: true,
+      header: `🚨 <b>MÍNIMO DO RADAR!</b> 🚨\n<i>O preço mais baixo que registámos para este produto</i>` };
+  }
+  return null;
+}
+
+// Guarda as ofertas publicadas (7 dias) para "As melhores da semana"
+function updateWeekLog() {
+  const week = (history._meta.week ||= {});
+  for (const d of dailyData.deals) {
+    if (d.asin && !week[d.asin]) week[d.asin] = { date: todayStr, title: d.title, oldPrice: d.oldPrice, currentPrice: d.currentPrice, discountPct: d.discountPct, affUrl: d.affUrl, imgUrl: d.imgUrl || null };
+  }
+  for (const [k, v] of Object.entries(week)) if (daysBetween(v.date, todayStr) > 7) delete week[k];
+}
+
+async function publishWeeklyIfDue() {
+  if (weekdayLisbon !== WEEKLY_WEEKDAY || !inPostHours() || lisbonHour < WEEKLY_HOUR || history._meta.weeklyDate === todayStr) return false;
+  const top = Object.values(history._meta.week || {}).sort((a, b) => b.discountPct - a.discountPct).slice(0, 5);
+  const voted = (history._meta.pollWinners || []).filter(w => daysBetween(w.date, todayStr) <= 7).sort((a, b) => b.votes - a.votes)[0];
+  if (top.length < 3 && !voted) {
+    console.log(`Melhores da semana: só ${top.length} oferta(s) registada(s) — fica para a próxima semana.`);
+    if (lisbonHour >= 21) history._meta.weeklyDate = todayStr;
+    return false;
+  }
+  const build = len => {
+    let c = `🏆 <b>AS MELHORES DA SEMANA — RADAR PT</b>\n`;
+    if (top.length) {
+      c += `<i>Os maiores descontos que publicámos nos últimos 7 dias:</i>\n\n`;
+      top.forEach((d, i) => {
+        c += `${MEDALS[i]} <a href="${withClickref(d.affUrl, "semana")}">${escapeHtml(cutText(d.title, len))}</a>\n<s>${d.oldPrice}</s> ➡️ <b>${d.currentPrice}</b> (-${d.discountPct}%)\n\n`;
+      });
+    }
+    if (voted) c += `🗳️ <b>O mais votado nas sondagens:</b> <a href="${voted.url}">${escapeHtml(cutText(voted.title, len))}</a> (${voted.votes} de ${voted.total} votos)\n\n`;
+    return c + `⚠️ <i>Preços de quando publicámos — alguns podem já ter mudado. Confirma no link.</i>`;
+  };
+  let caption = build(60);
+  for (const len of [45, 32]) if (visibleLength(caption) > 1024) caption = build(len);
+  const photo = top[0]?.imgUrl;
+  let ok = false;
+  if (photo && visibleLength(caption) <= 1024) ok = (await telegram("sendPhoto", { photo, caption, parse_mode: "HTML" })).ok;
+  if (!ok) ok = (await telegram("sendMessage", { text: caption, parse_mode: "HTML", disable_web_page_preview: true })).ok;
+  if (ok) { history._meta.weeklyDate = todayStr; console.log("Melhores da semana publicadas."); }
+  return ok;
+}
+
 // Mensagem de boas-vindas: publicada e fixada no canal só quando pedido (workflow manual)
 const WELCOME_TEXT =
   `👋 <b>Bem-vindo ao Radar Descontos & Tech PT!</b>\n\n` +
@@ -964,6 +1238,9 @@ const WELCOME_TEXT =
   `• 🔥 Novas ofertas e mais vendidos a cada 20 minutos\n` +
   `• ⭐ Oferta do dia, por volta do almoço\n` +
   `• 🏆 Top 5 do dia, às 21h\n` +
+  `• 🗳️ Sondagem do dia, às 13h\n` +
+  `• 🎯 Caça-pedidos ao domingo — diz-nos o que procuras\n` +
+  `• 🚨 Mínimo do Radar — quando um produto chega ao preço mais baixo que registámos\n` +
   `• 🕘 Publicações entre as 9h e as 22h — nada de madrugada\n\n` +
   `🏷️ Toca numa etiqueta (#tech, #gaming, #casa, #auto…) para ver só essa categoria.\n\n` +
   `🔔 <b>Ativa as notificações</b> para não perderes as ofertas relâmpago — o stock esgota depressa!\n\n` +
@@ -1009,6 +1286,7 @@ async function run() {
   let published = 0;
 
   if (PUBLISH_WELCOME) await publishWelcome();
+  try { await collectPedidos(); } catch (e) { console.error(`Pedidos falharam: ${e.message}`); }
 
   // Ofertas com desconto real, já filtradas
   const deals = [];
@@ -1047,9 +1325,17 @@ async function run() {
     published++;
   } else if (deals.length) {
     // Com descontos: 1 oferta sozinha ou grelha com até 4
-    const batch = deals.slice(0, GRID_SIZE);
+    const special = pickSpecialDeal(deals);
+    const batch = special ? [special.deal] : deals.slice(0, GRID_SIZE);
     let ok;
-    if (batch.length === 1) {
+    if (special) {
+      const d = special.deal;
+      ok = !!(await publishDeal(d.url, d.store, d.title, d.prices, d.imgUrl || null, d.pricesIncludeEsVat !== false,
+        { tags: tagsFor({ cat: d.cat, store: d.store }), refDays: d.refDays || 0, header: special.header }));
+      if (ok && special.pedido) { special.pedido.done = todayStr; await notifyRequester(special.pedido, d); }
+      if (ok && special.record) dailyData.recordAlerts = (dailyData.recordAlerts || 0) + 1;
+      if (ok) console.log(special.pedido ? `Pedido encontrado: «${special.pedido.q}» → ${d.id}` : `Mínimo do Radar: ${d.id}`);
+    } else if (batch.length === 1) {
       const d = batch[0];
       ok = !!(await publishDeal(d.url, d.store, d.title, d.prices, d.imgUrl || null, d.pricesIncludeEsVat !== false,
         { tags: tagsFor({ cat: d.cat, store: d.store }), refDays: d.refDays || 0 }));
@@ -1073,8 +1359,17 @@ async function run() {
   console.log(`Publicadas: ${published}. Ignoradas →`, JSON.stringify(stats));
   const topPosted = await publishDailyTopIfDue();
 
+  // Interação: sondagem (13h), caça-pedidos (domingo), melhores da semana (sexta) — além do post normal
+  updateWeekLog();
+  let extras = 0;
+  if (!FORCE_OTTOCAST && !BRAND_SPECIALS[FORCE_BRAND]) {
+    for (const fn of [publishPollIfDue, publishPedidosIfDue, publishWeeklyIfDue]) {
+      try { if (await fn()) extras++; } catch (e) { console.error(`${fn.name} falhou: ${e.message}`); }
+    }
+  }
+
   // Resumo privado para o dono quando nada foi publicado no canal
-  if (ADMIN_CHAT_ID && published === 0 && !topPosted && !bestsellerPaced) {
+  if (ADMIN_CHAT_ID && published === 0 && !topPosted && !extras && !bestsellerPaced) {
     const reasons = [];
     if (!inPostHours()) reasons.push(`fora do horário de publicação (${POST_HOURS[0]}h–${POST_HOURS[1]}h)`);
     reasons.push(`${lastSeenItems.length} produtos lidos, ${candidates.length} abaixo do preço do histórico`);
