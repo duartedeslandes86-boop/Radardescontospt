@@ -38,6 +38,7 @@ const FORCE_GRID = FORCE_GRID_SETS[String(process.env.FORCE_GRID || "").toLowerC
 const FORCE_SHOWCASE = process.env.FORCE_SHOWCASE === "true";
 const SHOWCASE_CATS = ["projetores", "autotech", "fitness", "smarthome", "energia", "drones", "wearables",
   "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare"];
+const SHOWCASE_ONLY = String(process.env.SHOWCASE_ONLY || "").split(",").map(x => x.trim()).filter(x => SHOWCASE_CATS.includes(x));
 const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
@@ -328,8 +329,8 @@ function parseBestsellers(html) {
   for (const card of html.split('id="gridItemRoot"').slice(1)) {
     const asin = (card.match(/data-asin="([A-Z0-9]{10})"/) || [])[1];
     if (!asin) continue;
-    // "N ofertas desde X €" é o preço mais baixo entre vendedores (pode ser usado) → ignorar
-    if (/ofertas?\s+(desde|a partir)|offers?\s+from/i.test(card)) continue;
+    // "N ofertas desde X €": preço mais baixo entre vendedores → só para grelhas ("desde X€"), nunca para ANTES/AGORA
+    const from = /ofertas?\s+(desde|a partir)|offers?\s+from/i.test(card);
     const price = (card.match(/class="[^"]*p13n-sc-price[^"]*">([^<]+)</) || [])[1];
     const title =
       (card.match(/line-clamp[^"]*">([^<]{5,})</) || [])[1] ||
@@ -342,7 +343,8 @@ function parseBestsellers(html) {
       title: decodeEntities(title).split(" | ")[0].trim(),
       price: parseEuro(price),
       rating,
-      imgUrl: hiResAmazonImage(img)
+      imgUrl: hiResAmazonImage(img),
+      ...(from ? { from: true } : {})
     });
   }
   return items;
@@ -450,6 +452,7 @@ function recordPrice(item) {
   h.i = item.imgUrl || h.i || null;
   if (item.cat) h.c = item.cat;
   if (item.rating) h.r = item.rating;
+  if (item.from) h.fr = 1; else delete h.fr;
   h.seen = todayStr;
   const prev = h.p[todayStr];
   h.p[todayStr] = prev ? Math.min(prev, item.price) : item.price;
@@ -516,7 +519,7 @@ async function fetchCandidateDeals() {
   for (const it of seenNow.values()) {
     const ref = referencePrice(it.asin); // calcula ANTES de registar o preço de hoje
     recordPrice(it);
-    if (ref && it.price < ref) {
+    if (ref && it.price < ref && !it.from) {
       candidates.push({ asin: it.asin, title: it.title, currentPrice: it.price, oldPrice: ref, imgUrl: it.imgUrl, cat: it.cat, refDays: priorDays(it.asin), pricesIncludeEsVat: true });
     }
   }
@@ -682,7 +685,7 @@ function productPool() {
     if (daysBetween(h.seen, todayStr) > 1) continue;
     const price = h.p[h.seen];
     if (!price) continue;
-    pool.set(asin, { asin, title: h.t, imgUrl: h.i, price, cat: h.c || "", rating: h.r || 0, fromHistory: true });
+    pool.set(asin, { asin, title: h.t, imgUrl: h.i, price, cat: h.c || "", rating: h.r || 0, fromHistory: true, ...(h.fr ? { from: true } : {}) });
   }
   return [...pool.values()];
 }
@@ -963,7 +966,7 @@ async function publishBestsellerGrid({ forceCats = null } = {}) {
     return false;
   }
   const rows = picks.map(it => {
-    const price = formatEur(it.price * VAT_ES_TO_PT);
+    const price = (it.from ? "desde " : "") + formatEur(it.price * VAT_ES_TO_PT);
     return {
       ...it, title: shortenTitle(cleanAndTranslateTitle(it.title), 60),
       imageLabel: price, buttonLabel: price,
@@ -1041,7 +1044,7 @@ async function publishDealOfDayIfDue(candidates) {
   } else {
     // Ainda sem descontos: destaque do mais vendido mais bem avaliado (≥25€)
     const pick = productPool()
-      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= MIN_RATING && hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
+      .filter(it => it.imgUrl && !it.from && it.price >= 25 && (it.rating || 0) >= MIN_RATING && hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
         !wasSent(it.asin) && !isLowValue(it.title) && !isUsedOrRefurbished(it.title))
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
     if (!pick) return false;
@@ -1142,7 +1145,7 @@ async function publishPollIfDue() {
       poll = {
         type: "prod",
         question: "🗳️ SONDAGEM DO DIA — Qual destes compravas?",
-        options: picks.map((it, i) => cutText(`${titles[i]} — ${formatEur(it.price * VAT_ES_TO_PT)}`, 100)),
+        options: picks.map((it, i) => cutText(`${titles[i]} — ${it.from ? "desde " : ""}${formatEur(it.price * VAT_ES_TO_PT)}`, 100)),
         keys: picks.map(it => it.asin), titles,
         urls: picks.map(it => `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`)
       };
@@ -1336,7 +1339,8 @@ async function publishWeeklyIfDue() {
 // Montra: lê a 1.ª lista de cada categoria nova e publica uma grelha de cada, com intervalo
 async function publishShowcase() {
   let done = 0;
-  for (const [i, cat] of SHOWCASE_CATS.entries()) {
+  const cats = SHOWCASE_ONLY.length ? SHOWCASE_ONLY : SHOWCASE_CATS;
+  for (const [i, cat] of cats.entries()) {
     const src = nextSource(cat);
     let res;
     try { res = await fetchCategory(src.path); } catch (e) { console.error(`Montra ${cat}: ${e.message}`); continue; }
@@ -1347,7 +1351,7 @@ async function publishShowcase() {
     for (const it of items) recordPrice({ ...it, cat });
     if (await publishBestsellerGrid({ forceCats: [cat] })) { done++; markPosted(); console.log(`Montra: ${cat} publicada.`); }
     else console.log(`Montra: ${cat} sem produtos suficientes.`);
-    if (i < SHOWCASE_CATS.length - 1) await sleep(SHOWCASE_GAP_SEC * 1000);
+    if (i < cats.length - 1) await sleep(SHOWCASE_GAP_SEC * 1000);
   }
   return done;
 }

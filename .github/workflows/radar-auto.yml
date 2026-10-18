@@ -33,6 +33,10 @@ on:
         description: 'Publicar já uma grelha de cada categoria nova (espaçadas ~1 min)'
         type: boolean
         default: false
+      montra_so:
+        description: 'Montra só destas categorias (separadas por vírgula; vazio = todas)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -86,6 +90,7 @@ jobs:
           FORCE_BRAND: ${{ inputs.force_marca || '' }}
           FORCE_GRID: ${{ inputs.force_grelha || '' }}
           FORCE_SHOWCASE: ${{ inputs.montra && 'true' || 'false' }}
+          SHOWCASE_ONLY: ${{ inputs.montra_so || '' }}
         run: node cron-runner.mjs
 
       - name: Guardar histórico de preços
