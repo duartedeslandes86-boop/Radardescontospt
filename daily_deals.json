@@ -1,7 +1,48 @@
 {
   "date": "2026-10-18",
   "lastSummaryDate": "2026-10-17",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "quatroelementos:carhartt-wip-hooded-stereo-sweat-i03362489xx",
+      "store": "4 Elementos",
+      "title": "CARHARTT W.I.P. Camisola com capuz em estéreo I033624.89.XX",
+      "currentPrice": "77,00€",
+      "oldPrice": "119,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fcarhartt-wip-hooded-stereo-sweat-i03362489xx",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8701.jpg?v=1768065919&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:nike-air-max-plus-drift-fd4290-700",
+      "store": "4 Elementos",
+      "title": "Nike Air Max Plus Drift FD4290-700",
+      "currentPrice": "130,00€",
+      "oldPrice": "199,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-air-max-plus-drift-fd4290-700",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8414.jpg?v=1768060839&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:ugg-w-classic-mini-platform-1134991-blk",
+      "store": "4 Elementos",
+      "title": "UGG W Classic Mini Plataforma 1134991-BLK",
+      "currentPrice": "123,00€",
+      "oldPrice": "189,95€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fugg-w-classic-mini-platform-1134991-blk",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8330.jpg?v=1768003239&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:converse-chuck-70-de-luxe-squared-a06436c",
+      "store": "4 Elementos",
+      "title": "Converse Chuck 70 De Luxe Squared A06436C",
+      "currentPrice": "78,00€",
+      "oldPrice": "120,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fconverse-chuck-70-de-luxe-squared-a06436c",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8193.jpg?v=1768001142&width=1200&format=pjpg"
+    }
+  ],
   "ottocastDate": "2026-10-18",
   "cheapSlots": [
     12
