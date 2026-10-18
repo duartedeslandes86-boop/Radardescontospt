@@ -971,7 +971,7 @@ async function publishDealOfDayIfDue(candidates) {
 //  4) Alerta "mínimo do Radar": desconto real grande com histórico longo → post sozinho com 🚨.
 // ---------------------------------------------------------------------------
 const POLL_HOUR = 13;
-const PEDIDOS_WEEKDAY = 0, PEDIDOS_HOUR = 11;  // domingo
+const PEDIDOS_WEEKDAY = 0, PEDIDOS_HOUR = 10;  // domingo
 const WEEKLY_WEEKDAY = 5, WEEKLY_HOUR = 19;    // sexta-feira
 const RECORD_MIN_DAYS = 14, RECORD_MIN_PCT = 25, RECORD_MAX_PER_DAY = 3;
 const PEDIDO_DAYS = 30, PEDIDOS_MAX = 200;
