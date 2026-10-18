@@ -44,7 +44,9 @@ const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
 const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
 const MIN_DISCOUNT_PCT = 15;
-const VAT_ES_TO_PT = 1.23 / 1.21;
+// Preços da Amazon guardados SEM IVA (o GitHub está nos EUA e a Amazon.es mostra-lhe preços de exportação, sem IVA).
+// Preço para Portugal = sem IVA × 1,23 (IVA PT). Se a página vier com IVA (entrega em Espanha/Portugal), tiramos o IVA antes.
+const VAT_ES_TO_PT = 1.23;
 const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
 const DAILY_FILE = "daily_deals.json";
@@ -365,7 +367,12 @@ async function fetchCategory(path) {
     return { blocked: true, items: [] };
   }
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-  return { blocked: false, items: parseBestsellers(html), html };
+  const items = parseBestsellers(html);
+  // Para onde a Amazon acha que entrega: Espanha/Portugal → preços com IVA; outros países → sem IVA
+  const country = decodeEntities((html.match(/id="glow-ingress-line2"[^>]*>([^<]+)</) || [])[1] || "").trim();
+  const vatIn = /espanha|espa[ñn]a|spain/i.test(country) ? 1.21 : /portugal/i.test(country) ? 1.23 : 1;
+  if (vatIn !== 1) for (const it of items) it.price = Math.round((it.price / vatIn) * 100) / 100;
+  return { blocked: false, items, html, country };
 }
 
 // ---------------------------------------------------------------------------
