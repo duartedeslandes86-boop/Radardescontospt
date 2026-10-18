@@ -1,21 +1,25 @@
 // Regras de conteúdo do canal: categorias, etiquetas, títulos curtos, produtos a evitar
 // e datas especiais (Black Friday, 11.11…).
 
-// Rotação de categorias da Amazon (3 por ciclo). Tech e gaming aparecem 2x por volta.
-// Sem higiene/bebé/animais/beleza: o canal é Tech, Gaming, Casa e Desporto.
+// Rotação de categorias da Amazon (1 por ciclo; cada uma alterna lista principal, subcategorias e Novidades).
+// Sem bebé/animais/cosmética: o canal é Tech, Gaming, Casa e Desporto (cuidado pessoal só aparelhos).
 // (slugs confirmados na Amazon.es: "home" e "diy" não existem → "appliances" e "tools")
 export const CATEGORIES = [
   "electronics", "kitchen", "videogames",
   "tools", "computers", "sports",
-  "appliances", "toys", "automotive", "lighting"
+  "appliances", "toys", "automotive", "lighting",
+  "office", "lawn-garden", "personalcare"
 ];
+// "personalcare" é uma categoria do bot (não da Amazon): só aparelhos de cuidado pessoal
+// (escovas elétricas, máquinas de barbear/depilar, secadores) — ver CAT_SOURCES no cron-runner.
 
 // Etiquetas por categoria da Amazon (no Telegram, tocar numa etiqueta filtra o canal)
 const CAT_TAGS = {
   electronics: ["#tech"], computers: ["#informatica", "#tech"], videogames: ["#gaming"],
   kitchen: ["#cozinha", "#casa"], home: ["#casa"], toys: ["#brinquedos"], sports: ["#desporto"],
   tools: ["#bricolage", "#casa"], appliances: ["#eletrodomesticos", "#casa"],
-  automotive: ["#auto"], lighting: ["#casa"]
+  automotive: ["#auto"], lighting: ["#casa"],
+  office: ["#escritorio"], "lawn-garden": ["#jardim", "#casa"], personalcare: ["#cuidadopessoal"]
 };
 // Etiquetas por loja Awin
 const STORE_TAGS = [
