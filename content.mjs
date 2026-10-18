@@ -8,7 +8,9 @@ export const CATEGORIES = [
   "electronics", "kitchen", "videogames",
   "tools", "computers", "sports",
   "appliances", "toys", "automotive", "lighting",
-  "office", "lawn-garden", "personalcare"
+  "office", "lawn-garden", "personalcare",
+  "projetores", "autotech", "fitness", "smarthome", "energia", "drones",
+  "wearables", "print3d", "pcgaming", "cozinhagadgets", "mobilidade"
 ];
 // "personalcare" é uma categoria do bot (não da Amazon): só aparelhos de cuidado pessoal
 // (escovas elétricas, máquinas de barbear/depilar, secadores) — ver CAT_SOURCES no cron-runner.
@@ -19,7 +21,11 @@ const CAT_TAGS = {
   kitchen: ["#cozinha", "#casa"], home: ["#casa"], toys: ["#brinquedos"], sports: ["#desporto"],
   tools: ["#bricolage", "#casa"], appliances: ["#eletrodomesticos", "#casa"],
   automotive: ["#auto"], lighting: ["#casa"],
-  office: ["#escritorio"], "lawn-garden": ["#jardim", "#casa"], personalcare: ["#cuidadopessoal"]
+  office: ["#escritorio"], "lawn-garden": ["#jardim", "#casa"], personalcare: ["#cuidadopessoal"],
+  projetores: ["#projetores", "#tech"], autotech: ["#auto", "#tech"], fitness: ["#fitness", "#desporto"],
+  smarthome: ["#casainteligente", "#tech"], energia: ["#energia", "#tech"], drones: ["#drones", "#tech"],
+  wearables: ["#smartwatch", "#tech"], print3d: ["#impressao3d", "#tech"], pcgaming: ["#gaming", "#informatica"],
+  cozinhagadgets: ["#cozinha", "#casa"], mobilidade: ["#mobilidade", "#desporto"]
 };
 // Etiquetas por loja Awin
 const STORE_TAGS = [
