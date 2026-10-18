@@ -34,6 +34,11 @@ const FORCE_BRAND = String(process.env.FORCE_BRAND || "").toLowerCase().trim();
 // Grelha temática a pedido (ex.: "tech" = eletrónica, informática e gaming), publicada já
 const FORCE_GRID_SETS = { tech: ["electronics", "computers", "videogames"] };
 const FORCE_GRID = FORCE_GRID_SETS[String(process.env.FORCE_GRID || "").toLowerCase().trim()] || null;
+// Montra: publica já uma grelha de cada categoria nova, espaçadas (workflow manual)
+const FORCE_SHOWCASE = process.env.FORCE_SHOWCASE === "true";
+const SHOWCASE_CATS = ["projetores", "autotech", "fitness", "smarthome", "energia", "drones", "wearables",
+  "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare"];
+const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
 const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
@@ -373,29 +378,28 @@ const CAT_SOURCES = {
   // Cuidado pessoal: escovas e irrigadores (Cuidados Orais), depilação/barbear, cabelo
   personalcare: { lists: ["hpc/4346882031", "beauty/4346878031", "beauty/4347698031"], only: t => GADGET_RE.test(t) && !NOT_GADGET_RE.test(t) },
   // Jardim: ferramentas e rega, churrascos, corta-relvas, terraço, piscinas
-  "lawn-garden": { lists: ["lawn-garden", "lawn-garden/26381675031", "lawn-garden/5940020031", "lawn-garden/5940100031", "lawn-garden/5940567031", "lawn-garden/5940640031"] }
+  "lawn-garden": { lists: ["lawn-garden", "lawn-garden/26381675031", "lawn-garden/5940020031", "lawn-garden/5940100031", "lawn-garden/5940567031", "lawn-garden/5940640031"] },
+  projetores: { lists: ["electronics/934343031", "electronics/934342031"] },                    // projetores, ecrãs de projeção
+  autotech: { lists: ["electronics/1461677031", "electronics/2458831031", "electronics/1461662031", "electronics/1461678031", "electronics/934181031"] }, // eletrónica auto, câmaras marcha-atrás, GPS, som, carregadores
+  fitness: { lists: ["sports/2928495031", "sports/2928765031", "sports/2928768031", "sports/2928767031"] }, // fitness, tecnologia fitness, máquinas, força
+  smarthome: { lists: ["smart-home", "electronics/930858031"] },                                // Alexa/Echo e casa inteligente, câmaras de vigilância
+  energia: { lists: ["electronics/5520542031", "electronics/934182031", "electronics/934184031", "electronics/934185031"] }, // powerbanks, carregadores parede/sem fios/solares
+  drones: { lists: ["toys/14525755031", "electronics/2929854031"] },                            // drones, câmaras de ação
+  wearables: { lists: ["electronics/3457446031"] },                                             // smartwatches
+  print3d: { lists: ["industrial/6684190031"] },                                                // impressão 3D
+  pcgaming: { lists: ["videogames/911106031", "videogames/911111031", "videogames/911112031", "videogames/13987407031", "computers/937887031", "computers/937992031"] }, // headsets, ratos, teclados, monitores
+  cozinhagadgets: { lists: ["kitchen/2165384031", "kitchen/13713554031", "kitchen/2165441031", "kitchen/2165154031"] }, // fritadeiras de ar, cafeteiras, vácuo, café
+  mobilidade: { lists: ["sports/2928513031"], only: t => /el[eé]tric|e-?scooter|motor|bateria/i.test(t) } // trotinetes elétricas
 };
 
 // Listas escolhidas à mão (entram na rotação antes das subcategorias descobertas)
 const CAT_PICKS = {
   electronics: [
-    "electronics/934343031",  // Projetores
-    "electronics/934342031",  // Ecrãs de projeção
     "electronics/934339031",  // Sistemas de home cinema
     "electronics/934250031",  // Streaming (Fire TV, Chromecast…)
     "electronics/934337031"   // Altifalantes
   ],
-  automotive: [
-    "electronics/1461677031", // Eletrónica automóvel
-    "electronics/2458831031", // Câmaras de marcha-atrás
-    "electronics/1461662031", // GPS
-    "electronics/1461678031"  // Áudio para carro
-  ],
   sports: [
-    "sports/2928495031",      // Exercício e fitness
-    "sports/2928765031",      // Tecnologia para fitness
-    "sports/2928768031",      // Máquinas de exercício
-    "sports/2928767031",      // Treino de força
     "sports/2928496031",      // Eletrónica e dispositivos
     "sports/2928487031",      // Ciclismo
     "sports/2928513031",      // Trotinetes
@@ -404,7 +408,7 @@ const CAT_PICKS = {
     "sports/2928471031"       // Campismo
   ]
 };
-const PICKS_ONLY = new Set(["sports", "automotive"]); // aqui não usa as subcategorias descobertas (muitas são de nicho)
+const PICKS_ONLY = new Set(["sports"]); // aqui não usa as subcategorias descobertas (muitas são de nicho)
 const OFFICE_EXCLUDE = /papel|post-it|caneta|esferogr|agrafe|envelope|l[aá]pis|marcador|fita adesiva|cola\b/i;
 
 function nextSource(cat) {
@@ -659,7 +663,11 @@ const CAT_TITLES = {
   kitchen: "🍳 TOP COZINHA", home: "🏠 TOP CASA", toys: "🧸 TOP BRINQUEDOS", sports: "⚽ TOP DESPORTO",
   tools: "🛠️ TOP BRICOLAGE", appliances: "🔌 TOP ELETRODOMÉSTICOS",
   automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO",
-  office: "🖊️ TOP ESCRITÓRIO", "lawn-garden": "🌿 TOP JARDIM", personalcare: "🪒 TOP CUIDADO PESSOAL"
+  office: "🖊️ TOP ESCRITÓRIO", "lawn-garden": "🌿 TOP JARDIM", personalcare: "🪒 TOP CUIDADO PESSOAL",
+  projetores: "📽️ TOP PROJETORES & ECRÃS", autotech: "🚗 TOP TECH PARA CARRO", fitness: "🏋️ TOP FITNESS & GINÁSIO",
+  smarthome: "🏠 TOP CASA INTELIGENTE", energia: "🔋 TOP POWERBANKS & CARREGADORES", drones: "🚁 TOP DRONES & CÂMARAS DE AÇÃO",
+  wearables: "⌚ TOP SMARTWATCHES", print3d: "🖨️ TOP IMPRESSÃO 3D", pcgaming: "🖱️ TOP PERIFÉRICOS GAMING",
+  cozinhagadgets: "☕ TOP GADGETS DE COZINHA", mobilidade: "🛴 TOP MOBILIDADE ELÉTRICA"
 };
 
 const minutesSinceLastPost = () =>
@@ -962,7 +970,7 @@ async function publishBestsellerGrid({ forceCats = null } = {}) {
       affUrl: `https://www.amazon.es/dp/${it.asin}?tag=${TAG}`
     };
   });
-  const head = forceCats ? "📱 TECNOLOGIA & GADGETS" : cheap ? `💸 ACHADOS ATÉ ${CHEAP_MAX}€` : theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
+  const head = forceCats ? (forceCats.length === 1 && CAT_TITLES[forceCats[0]]) || "📱 TECNOLOGIA & GADGETS" : cheap ? `💸 ACHADOS ATÉ ${CHEAP_MAX}€` : theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
   const sub = cheap ? "Coisas úteis e baratas, das mais vendidas · preços com IVA PT incluído" : "Os mais vendidos agora · preços com IVA PT incluído";
   let caption = seasonHeader() + `<b>${head} — AMAZON ES</b>\n<i>${sub}</i>\n\n`;
   rows.forEach((r, i) => {
@@ -1325,6 +1333,25 @@ async function publishWeeklyIfDue() {
   return ok;
 }
 
+// Montra: lê a 1.ª lista de cada categoria nova e publica uma grelha de cada, com intervalo
+async function publishShowcase() {
+  let done = 0;
+  for (const [i, cat] of SHOWCASE_CATS.entries()) {
+    const src = nextSource(cat);
+    let res;
+    try { res = await fetchCategory(src.path); } catch (e) { console.error(`Montra ${cat}: ${e.message}`); continue; }
+    if (res.blocked) { console.warn(`Montra: a Amazon pediu captcha em ${cat} — paro aqui.`); runNotes.push(`montra parou em ${cat} (captcha)`); break; }
+    const items = src.only ? res.items.filter(it => src.only(it.title)) : res.items;
+    const asins = new Set(items.map(it => it.asin));
+    lastSeenItems = lastSeenItems.filter(x => !asins.has(x.asin)).concat(items.map(it => ({ ...it, cat })));
+    for (const it of items) recordPrice({ ...it, cat });
+    if (await publishBestsellerGrid({ forceCats: [cat] })) { done++; markPosted(); console.log(`Montra: ${cat} publicada.`); }
+    else console.log(`Montra: ${cat} sem produtos suficientes.`);
+    if (i < SHOWCASE_CATS.length - 1) await sleep(SHOWCASE_GAP_SEC * 1000);
+  }
+  return done;
+}
+
 // Mensagem de boas-vindas: publicada e fixada no canal só quando pedido (workflow manual)
 const WELCOME_TEXT =
   `👋 <b>Bem-vindo ao Radar Descontos & Tech PT!</b>\n\n` +
@@ -1406,6 +1433,8 @@ async function run() {
   } else if (BRAND_SPECIALS[FORCE_BRAND]) {
     // Pedido manual: publica já o especial da marca escolhida (mesmo fora de horas)
     if (await publishBrandSpecial(FORCE_BRAND, { force: true })) { published++; markPosted(); }
+  } else if (FORCE_SHOWCASE) {
+    published += await publishShowcase();
   } else if (FORCE_GRID) {
     // Pedido manual: grelha temática já (mesmo fora de horas, sem esperar pela próxima)
     if (await publishBestsellerGrid({ forceCats: FORCE_GRID })) { published++; markPosted(); }
@@ -1461,7 +1490,7 @@ async function run() {
   // Interação: sondagem (13h), caça-pedidos (domingo), melhores da semana (sexta) — além do post normal
   updateWeekLog();
   let extras = 0;
-  if (!FORCE_OTTOCAST && !BRAND_SPECIALS[FORCE_BRAND] && !FORCE_GRID) {
+  if (!FORCE_OTTOCAST && !BRAND_SPECIALS[FORCE_BRAND] && !FORCE_GRID && !FORCE_SHOWCASE) {
     for (const fn of [publishPollIfDue, publishPedidosIfDue, publishWeeklyIfDue]) {
       try { if (await fn()) extras++; } catch (e) { console.error(`${fn.name} falhou: ${e.message}`); }
     }

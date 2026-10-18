@@ -29,6 +29,10 @@ on:
         type: choice
         options: ['', 'tech']
         default: ''
+      montra:
+        description: 'Publicar já uma grelha de cada categoria nova (espaçadas ~1 min)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -42,7 +46,7 @@ jobs:
   radar:
     name: Varrimento e Publicação Telegram
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.montra && 25 || 10 }}
     steps:
       - name: Obter código do repositório
         uses: actions/checkout@v6
@@ -81,6 +85,7 @@ jobs:
           FORCE_OTTOCAST: ${{ inputs.force_ottocast && 'true' || 'false' }}
           FORCE_BRAND: ${{ inputs.force_marca || '' }}
           FORCE_GRID: ${{ inputs.force_grelha || '' }}
+          FORCE_SHOWCASE: ${{ inputs.montra && 'true' || 'false' }}
         run: node cron-runner.mjs
 
       - name: Guardar histórico de preços
