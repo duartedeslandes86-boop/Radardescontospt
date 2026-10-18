@@ -602,6 +602,8 @@ const recentlyFeatured = asin => hoursSinceFeatured(asin) < GRID_REPEAT_HOURS;
 
 // Escolhe até 4 mais vendidos: tenta uma categoria-tema (diferente da última), completa com outras
 // Grelha "ACHADOS ATÉ 15€": produtos baratos (preço PT entre 5 e 15€), 2x por dia
+// Avaliação mínima na Amazon (estrelas) para entrar nas grelhas e no destaque do dia
+const MIN_RATING = 2.5;
 const CHEAP_MIN = 5, CHEAP_MAX = 15;
 const CHEAP_HOURS = [12, 20];
 
@@ -611,7 +613,7 @@ function pickGrid({ cheap = false } = {}) {
     return cheap ? pt >= CHEAP_MIN && pt <= CHEAP_MAX : it.price >= GRID_MIN_PRICE;
   };
   const eligible = productPool().filter(it =>
-    it.imgUrl && inRange(it) && (!it.rating || it.rating >= 4.2) && !wasSent(it.asin) &&
+    it.imgUrl && inRange(it) && (!it.rating || it.rating >= MIN_RATING) && !wasSent(it.asin) &&
     hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
     !isLowValue(it.title) && !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl)
   );
@@ -931,7 +933,7 @@ async function publishDealOfDayIfDue(candidates) {
   } else {
     // Ainda sem descontos: destaque do mais vendido mais bem avaliado (≥25€)
     const pick = productPool()
-      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= 4.4 && hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
+      .filter(it => it.imgUrl && it.price >= 25 && (it.rating || 0) >= MIN_RATING && hoursSinceFeatured(it.asin) >= GRID_MIN_REPEAT_HOURS &&
         !wasSent(it.asin) && !isLowValue(it.title) && !isUsedOrRefurbished(it.title))
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))[0];
     if (!pick) return false;
