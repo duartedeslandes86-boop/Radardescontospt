@@ -47,6 +47,7 @@ const MIN_DISCOUNT_PCT = 15;
 // Preços da Amazon guardados SEM IVA (o GitHub está nos EUA e a Amazon.es mostra-lhe preços de exportação, sem IVA).
 // Preço para Portugal = sem IVA × 1,23 (IVA PT). Se a página vier com IVA (entrega em Espanha/Portugal), tiramos o IVA antes.
 const VAT_ES_TO_PT = 1.23;
+const PT_NOTE = "📍 <i>Preço para entrega em Portugal. Se a app mostrar outro valor, confirma a morada de entrega no checkout.</i>";
 const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
 const DAILY_FILE = "daily_deals.json";
@@ -638,6 +639,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
     historyNote(refDays) + `\n` +
     `👉 <a href="${affUrl}">Ver oferta na ${escapeHtml(store)}</a>\n\n` +
     `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>` +
+    (vatNote ? `\n${PT_NOTE}` : "") +
     (tags ? `\n${tags}` : "") + seasonFooter();
   const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }]] };
 
@@ -988,7 +990,7 @@ async function publishBestsellerGrid({ forceCats = null } = {}) {
       (r.rating ? ` · ⭐${String(r.rating).replace(".", ",")}` : "") + `\n`;
   });
   const tags = [...new Set((cheap ? ["#achados", "#barato"] : []).concat(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" "))))].join(" ");
-  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${tags}` + seasonFooter();
+  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
 
   const collageTitle = SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : ((cheap || theme || forceCats) ? head.replace(/^\S+\s/, "") : "MAIS VENDIDOS HOJE");
   const ok = await sendGrid(rows, caption, collageTitle);
@@ -1018,7 +1020,7 @@ async function publishDealsGrid(deals) {
       `      ❌ <s>${r.prices.oldPrice}</s> ✅ <b>${r.prices.currentPrice}</b> (-${r.prices.discountPct}%)\n`;
   });
   const tags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: r.store }).split(" ")))].join(" ");
-  caption += `\n📉 <i>Preços abaixo do mais baixo que registámos</i>\n⚡ <i>Stock limitado</i>\n${tags}` + seasonFooter();
+  caption += `\n📉 <i>Preços abaixo do mais baixo que registámos</i>\n⚡ <i>Stock limitado</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
   return sendGrid(rows, caption, SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : "DESCIDAS DE PREÇO");
 }
 
@@ -1060,7 +1062,7 @@ async function publishDealOfDayIfDue(candidates) {
     const caption = seasonHeader() + `⭐ <b>DESTAQUE DO DIA</b> ⭐\n\n📦 <b>${escapeHtml(title)}</b>\n\n` +
       `⭐ ${String(pick.rating).replace(".", ",")} de 5 · um dos mais vendidos da Amazon ES\n` +
       `💶 <b>PREÇO ATUAL: ${formatEur(pick.price * VAT_ES_TO_PT)}</b>\n\n` +
-      `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n` +
+      `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n${PT_NOTE}\n` +
       tagsFor({ cat: pick.cat, store: "Amazon ES" }) + seasonFooter();
     ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML",
       reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }]] } })).ok;
