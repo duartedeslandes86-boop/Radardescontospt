@@ -303,7 +303,7 @@ if (!history || typeof history !== "object" || Array.isArray(history)) history =
 if (!history._meta) history._meta = { nextCategory: 0 };
 history._meta.featured = pruneDated(toDatedMap(history._meta.featured)); // produtos já mostrados nas grelhas
 history._meta.featuredAt = Object.fromEntries(Object.entries(history._meta.featuredAt || {})
-  .filter(([, at]) => Date.now() - Date.parse(at) < 2 * 86400000));
+  .filter(([, at]) => Date.now() - Date.parse(at) < 4 * 86400000));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -343,8 +343,8 @@ function parseBestsellers(html) {
   return items;
 }
 
-async function fetchCategory(cat) {
-  const url = `https://www.amazon.es/-/pt/gp/bestsellers/${cat}`;
+async function fetchCategory(path) {
+  const url = `https://www.amazon.es/-/pt/gp/${path}`;
   const res = await fetch(url, {
     headers: {
       "User-Agent": UA,
@@ -358,7 +358,85 @@ async function fetchCategory(cat) {
     return { blocked: true, items: [] };
   }
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-  return { blocked: false, items: parseBestsellers(html) };
+  return { blocked: false, items: parseBestsellers(html), html };
+}
+
+// ---------------------------------------------------------------------------
+// Variedade: cada categoria alterna entre a lista principal, uma subcategoria
+// (descobertas sozinhas na página principal) e as Novidades.
+// ---------------------------------------------------------------------------
+const SUB_EXCLUDE = /vcr|descodificador|antena|sat[eé]lite|garantia|sexo|sensualidade|[ií]ntim|medicament|vitamina|suplement|beb[eé]|crian[cç]|neve|planta|semente|bolbo|p[aá]ssaro|p[aá]gina seguinte|cart[aã]o|gift/i;
+// Só aparelhos (para as listas de cuidado pessoal, que também têm cremes, pastas, champôs…)
+const GADGET_RE = /el[eé]tric|eletr[oó]nic|recarreg|sem fios|wireless|bateria|m[aá]quina|aparador|barbear|depilad|epilad|secador|alisador|modelador|ondulador|escova de dentes|irrigador|balan[cç]a|tensi[oó]metro|term[oó]metro|massaj|massag|\bipl\b|luz pulsada/i;
+const NOT_GADGET_RE = /pasta de dentes|dent[ií]frico|cabe[cç]as de (substitui|recarga)|recarga|creme|gel |champ[oô]|lo[cç][aã]o/i;
+const CAT_SOURCES = {
+  // Cuidado pessoal: escovas e irrigadores (Cuidados Orais), depilação/barbear, cabelo
+  personalcare: { lists: ["hpc/4346882031", "beauty/4346878031", "beauty/4347698031"], only: t => GADGET_RE.test(t) && !NOT_GADGET_RE.test(t) },
+  // Jardim: ferramentas e rega, churrascos, corta-relvas, terraço, piscinas
+  "lawn-garden": { lists: ["lawn-garden", "lawn-garden/26381675031", "lawn-garden/5940020031", "lawn-garden/5940100031", "lawn-garden/5940567031", "lawn-garden/5940640031"] }
+};
+
+// Listas escolhidas à mão (entram na rotação antes das subcategorias descobertas)
+const CAT_PICKS = {
+  electronics: [
+    "electronics/934343031",  // Projetores
+    "electronics/934342031",  // Ecrãs de projeção
+    "electronics/934339031",  // Sistemas de home cinema
+    "electronics/934250031",  // Streaming (Fire TV, Chromecast…)
+    "electronics/934337031"   // Altifalantes
+  ],
+  automotive: [
+    "electronics/1461677031", // Eletrónica automóvel
+    "electronics/2458831031", // Câmaras de marcha-atrás
+    "electronics/1461662031", // GPS
+    "electronics/1461678031"  // Áudio para carro
+  ],
+  sports: [
+    "sports/2928495031",      // Exercício e fitness
+    "sports/2928765031",      // Tecnologia para fitness
+    "sports/2928768031",      // Máquinas de exercício
+    "sports/2928767031",      // Treino de força
+    "sports/2928496031",      // Eletrónica e dispositivos
+    "sports/2928487031",      // Ciclismo
+    "sports/2928513031",      // Trotinetes
+    "sports/2928518031",      // Padel
+    "sports/2928523031",      // Corrida
+    "sports/2928471031"       // Campismo
+  ]
+};
+const PICKS_ONLY = new Set(["sports", "automotive"]); // aqui não usa as subcategorias descobertas (muitas são de nicho)
+const OFFICE_EXCLUDE = /papel|post-it|caneta|esferogr|agrafe|envelope|l[aá]pis|marcador|fita adesiva|cola\b/i;
+
+function nextSource(cat) {
+  const st = ((history._meta.srcState ||= {})[cat] ||= { n: 0, si: -1 });
+  st.n++;
+  const fixed = CAT_SOURCES[cat];
+  if (fixed) {
+    st.si = (st.si + 1) % fixed.lists.length;
+    return { path: `bestsellers/${fixed.lists[st.si]}`, label: fixed.lists[st.si], only: fixed.only };
+  }
+  const only = cat === "office" ? t => !OFFICE_EXCLUDE.test(t) : null;
+  if (st.n % 3 === 0) return { path: `new-releases/${cat}`, label: `${cat} (novidades)`, only };
+  const disc = history._meta.subcats?.[cat] || { ids: [], names: [] };
+  const subs = [...(CAT_PICKS[cat] || []).map(x => ({ p: x, name: x }))]
+    .concat(PICKS_ONLY.has(cat) ? [] : disc.ids.map((id, i) => ({ p: `${cat}/${id}`, name: disc.names?.[i] || id })));
+  if (st.n % 3 === 1 || !subs.length) return { path: `bestsellers/${cat}`, label: cat, discover: true, only };
+  st.si = (st.si + 1) % subs.length;
+  return { path: `bestsellers/${subs[st.si].p}`, label: `${cat} › ${subs[st.si].name}`, only };
+}
+
+// Guarda as subcategorias que aparecem no menu da lista principal
+function discoverSubcats(cat, html) {
+  const re = new RegExp(`/gp/bestsellers/${cat}/(\\d+)[^>]*>([^<]{2,60})<`, "g");
+  const found = new Map();
+  for (const m of html.matchAll(re)) {
+    const name = decodeEntities(m[2]).trim();
+    if (!SUB_EXCLUDE.test(name) && !found.has(m[1])) found.set(m[1], name);
+  }
+  if (found.size) {
+    (history._meta.subcats ||= {})[cat] = { ids: [...found.keys()], names: [...found.values()], at: todayStr };
+    console.log(`Subcategorias de ${cat}: ${found.size}.`);
+  }
 }
 
 // Regista o preço de hoje (fica o mais baixo do dia)
@@ -413,13 +491,16 @@ async function fetchCandidateDeals() {
   for (const [i, cat] of cats.entries()) {
     if (i > 0) await sleep(4000 + Math.random() * 3000); // pausa entre pedidos
     try {
-      const { blocked, items } = await fetchCategory(cat);
+      const src = nextSource(cat);
+      const { blocked, items: all, html } = await fetchCategory(src.path);
       if (blocked) {
-        console.warn(`Amazon pediu captcha em "${cat}" — paro por este ciclo.`);
-        runNotes.push(`a Amazon pediu captcha em "${cat}"`);
+        console.warn(`Amazon pediu captcha em "${src.label}" — paro por este ciclo.`);
+        runNotes.push(`a Amazon pediu captcha em "${src.label}"`);
         break;
       }
-      console.log(`Categoria ${cat}: ${items.length} produtos com preço.`);
+      if (src.discover && html) discoverSubcats(cat, html);
+      const items = src.only ? all.filter(it => src.only(it.title)) : all;
+      console.log(`Lista ${src.label}: ${items.length} produtos com preço.`);
       for (const it of items) if (!seenNow.has(it.asin)) seenNow.set(it.asin, { ...it, cat });
     } catch (e) {
       console.error(`Categoria ${cat} falhou: ${e.message}`);
@@ -570,14 +651,15 @@ const inPostHours = () => lisbonHour >= POST_HOURS[0] && lisbonHour < POST_HOURS
 const MIN_GAP_MIN = 15;          // evita duas publicações seguidas se o bot correr 2x no mesmo período
 const GRID_SIZE = 4;             // até 4 produtos por publicação
 const GRID_MIN_PRICE = 20;
-const GRID_REPEAT_HOURS = 6;     // um produto só volta a uma grelha passadas 6 horas…
-const GRID_MIN_REPEAT_HOURS = 2; // …ou 2 horas, se não houver produtos novos suficientes
+const GRID_REPEAT_HOURS = 72;    // um produto só volta a uma grelha passados 3 dias…
+const GRID_MIN_REPEAT_HOURS = 12; // …ou 12 horas, se não houver produtos novos suficientes
 const NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
 const CAT_TITLES = {
   electronics: "📱 TOP TECNOLOGIA", computers: "💻 TOP INFORMÁTICA", videogames: "🎮 TOP GAMING",
   kitchen: "🍳 TOP COZINHA", home: "🏠 TOP CASA", toys: "🧸 TOP BRINQUEDOS", sports: "⚽ TOP DESPORTO",
   tools: "🛠️ TOP BRICOLAGE", appliances: "🔌 TOP ELETRODOMÉSTICOS",
-  automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO"
+  automotive: "🚗 TOP AUTO", lighting: "💡 TOP ILUMINAÇÃO",
+  office: "🖊️ TOP ESCRITÓRIO", "lawn-garden": "🌿 TOP JARDIM", personalcare: "🪒 TOP CUIDADO PESSOAL"
 };
 
 const minutesSinceLastPost = () =>
@@ -622,7 +704,7 @@ function pickGrid({ cheap = false, cats = null } = {}) {
     !isLowValue(it.title) && !isUsedOrRefurbished(it.title) && !isBlockedSource(it.imgUrl) &&
     (!cats || cats.includes(it.cat))
   );
-  // Primeiro os que não saíram nas últimas 6h; se faltarem, os que saíram há mais tempo
+  // Primeiro os que não saíram nos últimos 3 dias; se faltarem, os que saíram há mais tempo
   let ok = eligible.filter(it => !recentlyFeatured(it.asin));
   if (ok.length < GRID_SIZE) {
     const older = eligible.filter(it => recentlyFeatured(it.asin))
@@ -1060,7 +1142,9 @@ async function publishPollIfDue() {
   }
   // Dias ímpares (ou sem produtos suficientes): categorias
   if (!poll) {
-    const keys = CATEGORIES.filter(c => CAT_TITLES[c]).slice(0, 10);
+    const all = CATEGORIES.filter(c => CAT_TITLES[c]);
+    const off = daysBetween("2026-01-01", todayStr) % all.length;
+    const keys = all.slice(off).concat(all.slice(0, off)).slice(0, 10);
     poll = {
       type: "cat",
       question: "🗳️ SONDAGEM DO DIA — Que categoria queres ver mais no Radar? (a mais votada aparece mais vezes esta semana)",
