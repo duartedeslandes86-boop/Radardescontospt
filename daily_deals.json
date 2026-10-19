@@ -1,7 +1,48 @@
 {
   "date": "2026-10-19",
   "lastSummaryDate": "2026-10-18",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "quatroelementos:nike-terminator-low-unlv-fz4036-099",
+      "store": "4 Elementos",
+      "title": "Nike Terminator Low UNLV FZ4036-099",
+      "currentPrice": "84,00€",
+      "oldPrice": "129,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-terminator-low-unlv-fz4036-099",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8108.jpg?v=1767999658&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:asics-gel-terrain-1203a342-250",
+      "store": "4 Elementos",
+      "title": "Asics Gel-Terrain 1203A342-250",
+      "currentPrice": "97,00€",
+      "oldPrice": "150,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fasics-gel-terrain-1203a342-250",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/7951.jpg?v=1768054838&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:adidas-samba-og-if6514",
+      "store": "4 Elementos",
+      "title": "adidas Samba OG IF6514",
+      "currentPrice": "78,00€",
+      "oldPrice": "120,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fadidas-samba-og-if6514",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/7871.jpg?v=1768053030&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:autry-hoim2361-hoodie-iconic-man",
+      "store": "4 Elementos",
+      "title": "Autry HOIM2361 Moletom com capuz Iconic Man",
+      "currentPrice": "104,00€",
+      "oldPrice": "159,90€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fautry-hoim2361-hoodie-iconic-man",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/7210.jpg?v=1768042226&width=1200&format=pjpg"
+    }
+  ],
   "ottocastDate": "2026-10-19",
   "cheapSlots": [
     12
