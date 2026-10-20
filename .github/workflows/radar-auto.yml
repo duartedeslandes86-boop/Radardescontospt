@@ -25,9 +25,9 @@ on:
         options: ['', 'allpowers', 'quatroelementos', 'jimmy', 'tenways']
         default: ''
       force_grelha:
-        description: 'Publicar já uma grelha temática (tech = eletrónica, informática e gaming)'
+        description: 'Publicar já uma grelha temática (tech = eletrónica, informática e gaming; energia = power banks e carregadores)'
         type: choice
-        options: ['', 'tech']
+        options: ['', 'tech', 'energia']
         default: ''
       montra:
         description: 'Publicar já uma grelha de cada categoria nova (espaçadas ~1 min)'

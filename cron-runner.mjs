@@ -32,7 +32,7 @@ const FORCE_OTTOCAST = process.env.FORCE_OTTOCAST === "true"; // publicar já a 
 // publicar já um especial de marca: "allpowers", "jimmy" ou "tenways" (vazio = nenhum)
 const FORCE_BRAND = String(process.env.FORCE_BRAND || "").toLowerCase().trim();
 // Grelha temática a pedido (ex.: "tech" = eletrónica, informática e gaming), publicada já
-const FORCE_GRID_SETS = { tech: ["electronics", "computers", "videogames"] };
+const FORCE_GRID_SETS = { tech: ["electronics", "computers", "videogames"], energia: ["energia", "autotech"] }; // energia = power banks e carregadores/cabos
 const FORCE_GRID = FORCE_GRID_SETS[String(process.env.FORCE_GRID || "").toLowerCase().trim()] || null;
 // Montra: publica já uma grelha de cada categoria nova, espaçadas (workflow manual)
 const FORCE_SHOWCASE = process.env.FORCE_SHOWCASE === "true";
