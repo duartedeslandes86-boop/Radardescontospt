@@ -21,13 +21,7 @@ jobs:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          TEXTO=$(cat <<'TXT'
-🆕 A Mini App do Radar já está no ar!
-Produtos selecionados de power stations, roupa de marca, e-bikes e aspiradores, com link direto para a loja.
-👉 https://t.me/radardescontospt_bot/radar
-TXT
-          )
+          TEXTO="$(printf '%s\n' '🆕 A Mini App do Radar já está no ar!' 'Produtos selecionados de power stations, roupa de marca, e-bikes e aspiradores, com link direto para a loja.' '👉 https://t.me/radardescontospt_bot/radar')"
           curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" \
-            --data-urlencode "text=${TEXTO}" \
-            -d "disable_web_page_preview=false"
+            --data-urlencode "text=${TEXTO}"
