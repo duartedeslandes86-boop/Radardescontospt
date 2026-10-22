@@ -1,0 +1,33 @@
+name: Mini App - anúncio no canal (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: "escreve exatamente: publicar"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  anunciar:
+    if: ${{ inputs.confirmar == 'publicar' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar anúncio para o canal
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          TEXTO=$(cat <<'TXT'
+🆕 A Mini App do Radar já está no ar!
+Produtos selecionados de power stations, roupa de marca, e-bikes e aspiradores, com link direto para a loja.
+👉 https://t.me/radardescontospt_bot/radar
+TXT
+          )
+          curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" \
+            --data-urlencode "text=${TEXTO}" \
+            -d "disable_web_page_preview=false"
