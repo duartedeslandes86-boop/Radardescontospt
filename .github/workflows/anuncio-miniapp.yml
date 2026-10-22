@@ -19,7 +19,7 @@ jobs:
       - name: Enviar anúncio para o canal
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
         run: |
           TEXTO="$(printf '%s\n' '🆕 A Mini App do Radar já está no ar!' 'Produtos selecionados de power stations, roupa de marca, e-bikes e aspiradores, com link direto para a loja.' '👉 https://t.me/radardescontospt_bot/radar')"
           curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
