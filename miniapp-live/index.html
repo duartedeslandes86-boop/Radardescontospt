@@ -23,6 +23,11 @@
   .btn { margin-top:8px; display:block; text-align:center; background:var(--accent); color:#fff; text-decoration:none; border-radius:10px; padding:9px; font-size:14px; font-weight:600; }
   .empty { text-align:center; color:var(--muted); padding:40px 16px; font-size:15px; }
   .foot { margin-top:20px; font-size:12px; color:var(--muted); line-height:1.5; }
+  .code-box { display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--bg); border:1px dashed var(--accent); border-radius:10px; padding:8px 10px; margin-top:8px; }
+  .code-val { font-family:ui-monospace,Menlo,monospace; font-size:15px; font-weight:700; letter-spacing:1px; }
+  .copy { border:none; background:var(--accent); color:#fff; border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; cursor:pointer; }
+  .meta { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4; }
+  .store { font-size:12px; font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; }
   @media (min-width: 480px) { .grid { grid-template-columns:repeat(3,1fr); } }
 </style>
 </head>
@@ -44,9 +49,61 @@
     if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank');
   }
 
+  function setActive(btn) {
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.remove('on'));
+    btn.classList.add('on');
+  }
+
+  function copyCode(code, btn) {
+    try {
+      navigator.clipboard.writeText(code).then(
+        () => { btn.textContent = 'Copiado'; setTimeout(() => btn.textContent = 'Copiar', 1500); },
+        () => { btn.textContent = 'Erro'; }
+      );
+    } catch (e) { btn.textContent = 'Erro'; }
+  }
+
+  function renderCodes(codes) {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = '1fr';
+    if (!codes.length) {
+      grid.innerHTML = '<div class="empty">Sem códigos de momento.</div>';
+      return;
+    }
+    for (const c of codes) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="store"></div>
+        <div class="name"></div>
+        <div class="code-box" style="display:none"><span class="code-val"></span><button class="copy">Copiar</button></div>
+        <div class="meta"></div>
+        <div class="meta"></div>
+        <a class="btn" href="#">Ver oferta</a>`;
+      card.querySelector('.store').textContent = c.loja;
+      card.querySelector('.name').textContent = c.titulo;
+      if (c.codigo) {
+        const box = card.querySelector('.code-box');
+        box.style.display = 'flex';
+        box.querySelector('.code-val').textContent = c.codigo;
+        const copyBtn = box.querySelector('.copy');
+        copyBtn.addEventListener('click', () => copyCode(c.codigo, copyBtn));
+      }
+      const metas = card.querySelectorAll('.meta');
+      metas[0].textContent = 'Validade: ' + c.validade + (c.nota ? '. ' + c.nota : '');
+      metas[1].textContent = 'Confirmado: ' + c.confirmado;
+      const a = card.querySelector('.btn');
+      a.href = c.link;
+      a.addEventListener('click', e => { e.preventDefault(); open(c.link); });
+      grid.appendChild(card);
+    }
+  }
+
   function render(products, cat) {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
+    grid.style.gridTemplateColumns = '';
     const list = products.filter(p => cat === 'Todos' || p.categoria === cat);
     if (!list.length) {
       grid.innerHTML = '<div class="empty">Sem ofertas de momento. Vê o canal para as últimas.</div>';
@@ -72,23 +129,30 @@
 
   async function init() {
     let products = [];
+    let codes = [];
     try {
       const r = await fetch('products.json', { cache: 'no-store' });
       products = await r.json();
     } catch (e) { products = []; }
+    try {
+      const r = await fetch('codigos.json', { cache: 'no-store' });
+      codes = await r.json();
+    } catch (e) { codes = []; }
     const cats = ['Todos', ...new Set(products.map(p => p.categoria).filter(Boolean))];
     const tabs = document.getElementById('tabs');
     cats.forEach((c, i) => {
       const b = document.createElement('button');
       b.className = 'tab' + (i === 0 ? ' on' : '');
       b.textContent = c;
-      b.onclick = () => {
-        tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
-        b.classList.add('on');
-        render(products, c);
-      };
+      b.onclick = () => { setActive(b); render(products, c); };
       tabs.appendChild(b);
     });
+    // Separador próprio para códigos: fora do "Todos" e das categorias
+    const codeTab = document.createElement('button');
+    codeTab.className = 'tab';
+    codeTab.textContent = 'Códigos';
+    codeTab.onclick = () => { setActive(codeTab); renderCodes(codes); };
+    tabs.appendChild(codeTab);
     render(products, 'Todos');
   }
   init();
