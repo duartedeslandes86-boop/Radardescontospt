@@ -1,7 +1,18 @@
 {
   "date": "2026-10-23",
   "lastSummaryDate": "2026-10-22",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "B08H99BPJN",
+      "store": "Amazon ES",
+      "title": "Playstation 5 - Comando sem fios DualSense",
+      "currentPrice": "57,93€",
+      "oldPrice": "73,19€",
+      "discountPct": 21,
+      "affUrl": "https://www.amazon.es/dp/B08H99BPJN?tag=radardescontospt-21",
+      "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/61tpbGZhxBL._AC_SL1500_.jpg"
+    }
+  ],
   "ottocastDate": "2026-10-22",
   "cheapSlots": [],
   "recordAlerts": 0
