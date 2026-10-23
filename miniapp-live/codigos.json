@@ -1,0 +1,38 @@
+[
+  {
+    "loja": "Druni PT",
+    "titulo": "10% extra em cosmética, cabelo e maquilhagem",
+    "codigo": "DRUNI10",
+    "validade": "Até 30/10/2026 às 23:59",
+    "nota": "Desconto aplicado no carrinho. Exclui produtos Dior. Não acumulável com outras promoções ou cupões.",
+    "confirmado": "Email da Awin, 23/10/2026",
+    "link": "https://www.awin1.com/cread.php?awinmid=126617&awinaffid=3124493&campaign=&ued=https%3A%2F%2Fwww.druni.pt%2F"
+  },
+  {
+    "loja": "4 Elementos",
+    "titulo": "25% extra em artigos já com desconto",
+    "codigo": "EXTRA25",
+    "validade": "Ativo (sem data de fim indicada)",
+    "nota": "Aplica-se a artigos já em promoção. Marcas como Nike, Jordan, Carhartt WIP, Saucony e Mizuno.",
+    "confirmado": "Email da Awin, 23/10/2026",
+    "link": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fcollections%2Fsale-4"
+  },
+  {
+    "loja": "Sinocare",
+    "titulo": "Halloween: 20% em toda a loja",
+    "codigo": null,
+    "validade": "22 a 31/10/2026",
+    "nota": "Sem código indicado no email da marca.",
+    "confirmado": "Email da Awin, 23/10/2026",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2F"
+  },
+  {
+    "loja": "Sinocare",
+    "titulo": "Kit Safe Accu (medidor + 100 tiras + 100 lancetas): 50%",
+    "codigo": null,
+    "validade": "Até 30/11/2026, enquanto houver stock",
+    "nota": "Desconto aplicado automaticamente no checkout. Só compra única.",
+    "confirmado": "Email da Awin, 23/10/2026",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&campaign=safe+accu+kit+50+off+oct26&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-blood-glucose-monitor-safe-accu%3Fvariant%3D43072245825768"
+  }
+]
