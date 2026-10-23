@@ -1878,5 +1878,131 @@
     "precoAntes": 2699,
     "desconto": 7,
     "precoVerificado": true
+  },
+  {
+    "nome": "[200pcs] Sinocare Glucometer Glucose Test Strips without lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/200.jpg?v=1782703369",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2F200pcs-sinocare-glucometer-glucose-test-strips-without-lancets",
+    "preco": 35.99,
+    "precoAntes": 40.99,
+    "desconto": 12,
+    "precoVerificado": true
+  },
+  {
+    "nome": "[200pcs] Sinocare Glucometer Glucose Test Strips with free Lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/aq_200.jpg?v=1770283149",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2F200pcs-sinocare-glucometer-glucose-test-strips-with-free-lancets",
+    "preco": 39.99,
+    "precoAntes": 43.99,
+    "desconto": 9,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Custom Eco-friendly PLA Coffee Cup",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/2_14940f70-d863-48f8-b3d2-188535dfa8a0.jpg?v=1765185549",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-custom-eco-friendly-pla-coffee-cup",
+    "preco": 25.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare BA-816 Automatic Upper Arm Blood Pressure Monitor",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/01_d89a11e7-b05a-4eb4-994e-655cb1cc1768.jpg?v=1789541253",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-automatic-upper-arm-blood-pressure-monitor",
+    "preco": 109.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare ARM-30E+ Upper Arm Blood Pressure Monitor -Dual User Mode, Each 99  Memories",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/1_4.jpg?v=1728539983",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-arm-blood-pressure-monitor",
+    "preco": 22.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Pen Needles 32G 4MM Box of 100",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/9_1_e09a5ab4-a4aa-41b4-9056-9165bf5bb484.jpg?v=1760945908",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-insulin-pen-needles",
+    "preco": 12.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "[100pcs] Sinocare Glucometer Glucose Test Strips with free Lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/smart100.jpg?v=1697706922",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2F100pcs-sinocare-blood-glucose-test-strips-with-free-lancets",
+    "preco": 28.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "[50pcs] Sinocare Glucometer Glucose Test Strips without Lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/AQ.jpg?v=1746776346",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2F50pcs-sinocare-blood-glucose-test-strips-without-free-lancets",
+    "preco": 14.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe AQ proⅠBlood Glucose Meter Glucometer Kit Diabetes Tester Medical Blood Sugar Meter or Only Test Strips Lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/AQ_pro_glucometer_kit.jpg?v=1745819870",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-safe-aq-pro-i-blood-glucose-meter",
+    "preco": 22.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe AQ UG Test strips with free lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/2000-2000-4.jpg?v=1772264071",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-uric-acid-test-strips-of-safe-aq-ug",
+    "preco": 18.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "[50pcs] Sinocare Glucometer Glucose Test Strips with free lancets",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/products/aq50voicesmart_e1267303-8ab4-4cf0-9da2-aab08d23ebc2.jpg?v=1635151799",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-blood-glucose-test-strips",
+    "preco": 17.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe AQ UG Blood Glucose Uric Acid Meter with Advanced Test Strips Lancet for Multifunctions",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/6_1_833e6369-2b0c-429b-9303-afea90ccb250.jpg?v=1733733176",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-blood-glucose-uric-acid-meter-with-test-strips-lancet",
+    "preco": 38.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe Accu Blood Glucose Monitor with Large Memory Capacity, High-cost Performance",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/2000-4_0abc9a0d-775c-480e-ae77-5006d21deab7.jpg?v=1733207722",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-blood-glucose-monitor-safe-accu",
+    "preco": 15.99,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe Accu 2 Blood Sugar Monitor with Advanced Technology, 200 Memory to Know Value Changes",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/12.jpg?v=1768198070",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsinocare-blood-suger-monitor-safe-accu2",
+    "preco": 21.99,
+    "precoAntes": 27.99,
+    "desconto": 21,
+    "precoVerificado": true
+  },
+  {
+    "nome": "Sinocare Safe AQ Smart Blood Sugar Monitor – Portable, No Coding, Painless Diabetic Test Kit",
+    "categoria": "Sinocare",
+    "imagem": "https://cdn.shopify.com/s/files/1/0501/0761/3335/files/1_4447d50b-10ba-4130-9eb7-2989901376de.jpg?v=1748482956",
+    "link": "https://www.awin1.com/cread.php?awinmid=114180&awinaffid=3124493&ued=https%3A%2F%2Fen.sinocare.com%2Fproducts%2Fsafe-aq-smart-blood-glucometer",
+    "preco": 17.99,
+    "precoVerificado": true
   }
 ]
