@@ -20,6 +20,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Copiar catálogo da Amazon (se existir)
+        run: |
+          if [ -f amazon-catalog.json ]; then cp amazon-catalog.json miniapp-live/; else echo '[]' > miniapp-live/amazon-catalog.json; fi
       - name: Validar JSON do catálogo
         run: node -e "const p=require('./miniapp-live/products.json'); if(!Array.isArray(p)||p.length===0) throw new Error('catálogo vazio'); console.log('produtos:', p.length)"
       - name: Teste (sem publicar)

@@ -105,7 +105,7 @@ jobs:
         run: |
           git config user.name "radar-bot"
           git config user.email "bot@radardescontos.pt"
-          git add sent_deals.json daily_deals.json || true
+          git add sent_deals.json daily_deals.json amazon-catalog.json || true
           if git diff --staged --quiet; then
             echo "Sem alterações ao estado."
             exit 0
