@@ -138,6 +138,11 @@
       const r = await fetch('codigos.json', { cache: 'no-store' });
       codes = await r.json();
     } catch (e) { codes = []; }
+    try {
+      const r3 = await fetch('amazon-catalog.json', { cache: 'no-store' });
+      const extra = await r3.json();
+      if (Array.isArray(extra)) products = products.concat(extra);
+    } catch (e) { /* sem catálogo da Amazon: segue só com as lojas */ }
     const cats = ['Todos', ...new Set(products.map(p => p.categoria).filter(Boolean))];
     const tabs = document.getElementById('tabs');
     cats.forEach((c, i) => {

@@ -1396,12 +1396,28 @@ async function publishWelcome() {
 // ---------------------------------------------------------------------------
 // Ciclo principal
 // ---------------------------------------------------------------------------
+// Catálogo da Amazon para a Mini App (sem preço: só nome, imagem e link de afiliado)
+const CATALOGO_AMAZON = "amazon-catalog.json";
+function atualizarCatalogoAmazon(itens) {
+  if (DRY_RUN) return;
+  const atual = readJson(CATALOGO_AMAZON, []);
+  const porAsin = new Map((Array.isArray(atual) ? atual : []).map(p => [p.asin, p]));
+  const agora = new Date().toISOString();
+  for (const it of itens) {
+    if (!it.asin || !it.imgUrl) continue;
+    porAsin.set(it.asin, { asin: it.asin, nome: it.title, categoria: "Amazon ES", imagem: it.imgUrl, link: it.url, precoVerificado: false, visto: agora });
+  }
+  const lista = [...porAsin.values()].sort((a, b) => String(b.visto).localeCompare(String(a.visto))).slice(0, 300);
+  fs.writeFileSync(CATALOGO_AMAZON, JSON.stringify(lista, null, 1));
+}
+
 async function run() {
   console.log(`A iniciar varrimento do Radar (${todayStr}, ${lisbonHour}h Lisboa)${DRY_RUN ? " [DRY_RUN]" : ""}...`);
 
   const amazon = (await fetchCandidateDeals()).map(c => ({
     ...c, id: c.asin, store: "Amazon ES", url: `https://www.amazon.es/dp/${c.asin}?tag=${TAG}`
   }));
+  try { atualizarCatalogoAmazon(amazon); } catch (e) { console.error(`Catálogo Amazon não atualizado: ${e.message}`); }
   let awin = [];
   try {
     awin = await fetchAwinCandidates({
