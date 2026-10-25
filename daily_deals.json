@@ -11,6 +11,46 @@
       "discountPct": 17,
       "affUrl": "https://www.amazon.es/dp/B0H88JVF1P?tag=radardescontospt-21",
       "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/81aLRwgGzUL._AC_SL1500_.jpg"
+    },
+    {
+      "asin": "quatroelementos:nike-zoom-vomero-5-se-ib2988-001",
+      "store": "4 Elementos",
+      "title": "Nike Zoom Vomero 5 SE IB2988-001",
+      "currentPrice": "104,00€",
+      "oldPrice": "159,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-zoom-vomero-5-se-ib2988-001",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/12219.jpg?v=1768081983&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:nike-terminator-low-unlv-fz4036-099",
+      "store": "4 Elementos",
+      "title": "Nike Terminator Low UNLV FZ4036-099",
+      "currentPrice": "84,00€",
+      "oldPrice": "129,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-terminator-low-unlv-fz4036-099",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8108.jpg?v=1767999658&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:nike-acg-moc-ocean-bliss-blue-dq6453-400",
+      "store": "4 Elementos",
+      "title": "Nike ACG Moc Ocean Bliss Blue DQ6453-400",
+      "currentPrice": "62,00€",
+      "oldPrice": "94,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-acg-moc-ocean-bliss-blue-dq6453-400",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/7194.jpg?v=1768041918&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:puma-383112-01-cali-dream",
+      "store": "4 Elementos",
+      "title": "Puma 383112-01 Cali Dream",
+      "currentPrice": "65,00€",
+      "oldPrice": "100,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fpuma-383112-01-cali-dream",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/6969.jpg?v=1768036835&width=1200&format=pjpg"
     }
   ],
   "ottocastDate": "2026-10-25",
