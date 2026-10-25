@@ -37,7 +37,7 @@ const FORCE_GRID = FORCE_GRID_SETS[String(process.env.FORCE_GRID || "").toLowerC
 // Montra: publica já uma grelha de cada categoria nova, espaçadas (workflow manual)
 const FORCE_SHOWCASE = process.env.FORCE_SHOWCASE === "true";
 const SHOWCASE_CATS = ["projetores", "autotech", "fitness", "smarthome", "energia", "drones", "wearables",
-  "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare", "minipc"];
+  "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare", "minipc", "audio"];
 const SHOWCASE_ONLY = String(process.env.SHOWCASE_ONLY || "").split(",").map(x => x.trim()).filter(x => SHOWCASE_CATS.includes(x));
 const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 
@@ -400,7 +400,8 @@ const CAT_SOURCES = {
   pcgaming: { lists: ["videogames/911106031", "videogames/911111031", "videogames/911112031", "videogames/13987407031", "computers/937887031", "computers/937992031"] }, // headsets, ratos, teclados, monitores
   cozinhagadgets: { lists: ["kitchen/2165384031", "kitchen/13713554031", "kitchen/2165441031", "kitchen/2165154031"] }, // fritadeiras de ar, cafeteiras, vácuo, café
   mobilidade: { lists: ["sports/2928513031"], only: t => /el[eé]tric|e-?scooter|motor|bateria/i.test(t) }, // trotinetes elétricas
-  minipc: { lists: ["computers/56164442031"] }                                                             // mini PCs / PCs Stick
+  minipc: { lists: ["computers/56164442031"] },                                                            // mini PCs / PCs Stick
+  audio: { lists: ["electronics/17420905031", "electronics/16725713031"] }                                 // auscultadores/auriculares, colunas portáteis
 };
 
 // Listas escolhidas à mão (entram na rotação antes das subcategorias descobertas)
@@ -681,7 +682,7 @@ const CAT_TITLES = {
   smarthome: "🏠 TOP CASA INTELIGENTE", energia: "🔋 TOP POWERBANKS & CARREGADORES", drones: "🚁 TOP DRONES & CÂMARAS DE AÇÃO",
   wearables: "⌚ TOP SMARTWATCHES", print3d: "🖨️ TOP IMPRESSÃO 3D", pcgaming: "🖱️ TOP PERIFÉRICOS GAMING",
   cozinhagadgets: "☕ TOP GADGETS DE COZINHA", mobilidade: "🛴 TOP MOBILIDADE ELÉTRICA",
-  minipc: "💻 TOP MINI PCS"
+  minipc: "💻 TOP MINI PCS", audio: "🎧 TOP AUSCULTADORES & COLUNAS"
 };
 
 const minutesSinceLastPost = () =>
