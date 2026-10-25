@@ -1,7 +1,18 @@
 {
   "date": "2026-10-25",
   "lastSummaryDate": "2026-10-24",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "B0H88JVF1P",
+      "store": "Amazon ES",
+      "title": "Miquelrius - Agenda 2027 Multilingue semana vista A5+",
+      "currentPrice": "14,18€",
+      "oldPrice": "17,16€",
+      "discountPct": 17,
+      "affUrl": "https://www.amazon.es/dp/B0H88JVF1P?tag=radardescontospt-21",
+      "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/81aLRwgGzUL._AC_SL1500_.jpg"
+    }
+  ],
   "ottocastDate": "2026-10-25",
   "cheapSlots": [
     12
