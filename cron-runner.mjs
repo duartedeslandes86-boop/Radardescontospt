@@ -51,9 +51,17 @@ const PT_NOTE = "📍 <i>Preço para entrega em Portugal. Se a app mostrar outro
 const MINIAPP_URL = "https://t.me/radardescontospt_bot/radar";
 const CHANNEL_URL = "https://t.me/radardescontos_pt";
 const SHARE_URL = `https://t.me/share/url?url=${encodeURIComponent(CHANNEL_URL)}&text=${encodeURIComponent("Descontos reais, verificados, em tech/casa/desporto 👇")}`;
+const IG_URL = "https://www.instagram.com/radar_descontospt";
+const TIKTOK_URL = "https://www.tiktok.com/@radardescontos_pt";
+const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=1425522530641237";
 const miniAppButtonRow = () => [
   { text: "🧭 Mini App", url: MINIAPP_URL },
   { text: "📤 Partilhar", url: SHARE_URL },
+];
+const socialButtonsRow = () => [
+  { text: "📸 Instagram", url: IG_URL },
+  { text: "🎵 TikTok", url: TIKTOK_URL },
+  { text: "📘 Facebook", url: FACEBOOK_URL },
 ];
 const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
@@ -605,6 +613,7 @@ async function publishDailyTopIfDue() {
       url: d.affUrl
     }]);
     buttons.push(miniAppButtonRow());
+    buttons.push(socialButtonsRow());
     ok = (await telegram("sendMessage", {
       text: caption,
       parse_mode: "HTML",
@@ -651,7 +660,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
     `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>` +
     (vatNote ? `\n${PT_NOTE}` : "") +
     (tags ? `\n${tags}` : "") + seasonFooter();
-  const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }], miniAppButtonRow()] };
+  const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }], miniAppButtonRow(), socialButtonsRow()] };
 
   let ok = false;
   if (imgUrl) {
@@ -789,6 +798,7 @@ async function sendGrid(rows, caption, collageTitle, collageSubtitle) {
     buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.buttonLabel}`, url: r.affUrl })));
   }
   buttons.push(miniAppButtonRow());
+  buttons.push(socialButtonsRow());
   let ok = false;
   try {
     const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.imageLabel })), { title: collageTitle, ...(collageSubtitle ? { subtitle: collageSubtitle } : {}) });
@@ -1077,7 +1087,7 @@ async function publishDealOfDayIfDue(candidates) {
       `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n${PT_NOTE}\n` +
       tagsFor({ cat: pick.cat, store: "Amazon ES" }) + seasonFooter();
     ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML",
-      reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }], miniAppButtonRow()] } })).ok;
+      reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }], miniAppButtonRow(), socialButtonsRow()] } })).ok;
     if (ok) {
       history._meta.featured[pick.asin] = todayStr;
       console.log(`Destaque do dia: ${pick.asin} | ${title}`);
@@ -1393,6 +1403,8 @@ const WELCOME_TEXT =
   `🏷️ Toca numa etiqueta (#tech, #gaming, #casa, #auto…) para ver só essa categoria.\n\n` +
   `🔔 <b>Ativa as notificações</b> para não perderes as ofertas relâmpago — o stock esgota depressa!\n\n` +
   `📣 Conheces alguém que gosta de poupar? Partilha: t.me/radardescontos_pt\n\n` +
+  `🧭 Mini App com todas as ofertas por setor: t.me/radardescontospt_bot/radar\n` +
+  `📸 Instagram: instagram.com/radar_descontospt · 🎵 TikTok: tiktok.com/@radardescontos_pt · 📘 Facebook: facebook.com/profile.php?id=1425522530641237\n\n` +
   `<i>Como Afiliado da Amazon e de outras lojas, obtemos uma comissão por compras qualificadas, sem custo extra para ti.</i>`;
 
 async function publishWelcome() {
