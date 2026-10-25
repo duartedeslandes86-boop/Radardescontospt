@@ -37,7 +37,7 @@ const FORCE_GRID = FORCE_GRID_SETS[String(process.env.FORCE_GRID || "").toLowerC
 // Montra: publica já uma grelha de cada categoria nova, espaçadas (workflow manual)
 const FORCE_SHOWCASE = process.env.FORCE_SHOWCASE === "true";
 const SHOWCASE_CATS = ["projetores", "autotech", "fitness", "smarthome", "energia", "drones", "wearables",
-  "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare"];
+  "print3d", "pcgaming", "cozinhagadgets", "mobilidade", "office", "lawn-garden", "personalcare", "minipc"];
 const SHOWCASE_ONLY = String(process.env.SHOWCASE_ONLY || "").split(",").map(x => x.trim()).filter(x => SHOWCASE_CATS.includes(x));
 const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 
@@ -399,7 +399,8 @@ const CAT_SOURCES = {
   print3d: { lists: ["industrial/6684190031"] },                                                // impressão 3D
   pcgaming: { lists: ["videogames/911106031", "videogames/911111031", "videogames/911112031", "videogames/13987407031", "computers/937887031", "computers/937992031"] }, // headsets, ratos, teclados, monitores
   cozinhagadgets: { lists: ["kitchen/2165384031", "kitchen/13713554031", "kitchen/2165441031", "kitchen/2165154031"] }, // fritadeiras de ar, cafeteiras, vácuo, café
-  mobilidade: { lists: ["sports/2928513031"], only: t => /el[eé]tric|e-?scooter|motor|bateria/i.test(t) } // trotinetes elétricas
+  mobilidade: { lists: ["sports/2928513031"], only: t => /el[eé]tric|e-?scooter|motor|bateria/i.test(t) }, // trotinetes elétricas
+  minipc: { lists: ["computers/13829965031"], only: t => /mini\s?pc/i.test(t) }                           // mini PCs (filtrado dentro de "Torres")
 };
 
 // Listas escolhidas à mão (entram na rotação antes das subcategorias descobertas)
@@ -679,7 +680,8 @@ const CAT_TITLES = {
   projetores: "📽️ TOP PROJETORES & ECRÃS", autotech: "🚗 TOP TECH PARA CARRO", fitness: "🏋️ TOP FITNESS & GINÁSIO",
   smarthome: "🏠 TOP CASA INTELIGENTE", energia: "🔋 TOP POWERBANKS & CARREGADORES", drones: "🚁 TOP DRONES & CÂMARAS DE AÇÃO",
   wearables: "⌚ TOP SMARTWATCHES", print3d: "🖨️ TOP IMPRESSÃO 3D", pcgaming: "🖱️ TOP PERIFÉRICOS GAMING",
-  cozinhagadgets: "☕ TOP GADGETS DE COZINHA", mobilidade: "🛴 TOP MOBILIDADE ELÉTRICA"
+  cozinhagadgets: "☕ TOP GADGETS DE COZINHA", mobilidade: "🛴 TOP MOBILIDADE ELÉTRICA",
+  minipc: "💻 TOP MINI PCS"
 };
 
 const minutesSinceLastPost = () =>
