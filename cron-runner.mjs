@@ -400,7 +400,7 @@ const CAT_SOURCES = {
   pcgaming: { lists: ["videogames/911106031", "videogames/911111031", "videogames/911112031", "videogames/13987407031", "computers/937887031", "computers/937992031"] }, // headsets, ratos, teclados, monitores
   cozinhagadgets: { lists: ["kitchen/2165384031", "kitchen/13713554031", "kitchen/2165441031", "kitchen/2165154031"] }, // fritadeiras de ar, cafeteiras, vácuo, café
   mobilidade: { lists: ["sports/2928513031"], only: t => /el[eé]tric|e-?scooter|motor|bateria/i.test(t) }, // trotinetes elétricas
-  minipc: { lists: ["computers/13829965031"], only: t => /mini\s?pc/i.test(t) }                           // mini PCs (filtrado dentro de "Torres")
+  minipc: { lists: ["computers/56164442031"] }                                                             // mini PCs / PCs Stick
 };
 
 // Listas escolhidas à mão (entram na rotação antes das subcategorias descobertas)
