@@ -31,4 +31,4 @@ jobs:
         run: |
           curl -sS "https://api.telegram.org/bot${TOKEN}/setChatDescription" \
             --data-urlencode "chat_id=${CHAT}" \
-            --data-urlencode "description=Descontos reais e verificados em tech, casa e desporto. Mini App por setores: t.me/radardescontospt_bot/radar"
+            --data-urlencode "description=Descontos reais e verificados em tech, casa e desporto. Mini App: t.me/radardescontospt_bot/radar | IG/TikTok/FB: @radardescontos_pt"
