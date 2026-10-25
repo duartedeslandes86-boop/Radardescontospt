@@ -21,7 +21,7 @@ jobs:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
         run: |
-          TEXTO="$(printf '%s\n' '🆕 A Mini App do Radar já está no ar!' 'Produtos selecionados de power stations, roupa de marca, e-bikes e aspiradores, com link direto para a loja.' '👉 https://t.me/radardescontospt_bot/radar')"
+          TEXTO="$(printf '%s\n' '🧭 Novidade na Mini App do Radar!' '' 'Reorganizámos tudo por setores, para ser mais fácil de explorar:' '📱 Eletrónica & Tech · 🏡 Casa & Jardim · 🏃 Desporto & Ar Livre' '💄 Beleza & Saúde · 👕 Moda & Acessórios · 🚗 Automóvel' '' 'Com produtos de todas as lojas parceiras + Amazon.es, e um separador "Destaques" com os melhores descontos verificados do momento.' '' '👉 https://t.me/radardescontospt_bot/radar')"
           curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" \
             --data-urlencode "text=${TEXTO}"
