@@ -657,7 +657,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
     `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n` +
     historyNote(refDays) + `\n` +
     `👉 <a href="${affUrl}">Ver oferta na ${escapeHtml(store)}</a>\n\n` +
-    `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>` +
+    `⚡ <i>${vatNote ? "Envio para Portugal (confirma no checkout) | " : ""}Stock limitado</i>` +
     (vatNote ? `\n${PT_NOTE}` : "") +
     (tags ? `\n${tags}` : "") + seasonFooter();
   const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }], miniAppButtonRow(), socialButtonsRow()] };
@@ -1005,7 +1005,7 @@ async function publishBestsellerGrid({ forceCats = null } = {}) {
     };
   });
   const head = forceCats ? (forceCats.length === 1 && CAT_TITLES[forceCats[0]]) || "📱 TECNOLOGIA & GADGETS" : cheap ? `💸 ACHADOS ATÉ ${CHEAP_MAX}€` : theme ? CAT_TITLES[theme] || "🔥 MAIS VENDIDOS" : "🔥 MAIS VENDIDOS";
-  const sub = cheap ? "Coisas úteis e baratas, das mais vendidas · preços com IVA PT incluído" : "Os mais vendidos agora · preços com IVA PT incluído";
+  const sub = cheap ? "Coisas úteis e baratas, das mais vendidas · preços Amazon ES (confirma no checkout)" : "Os mais vendidos agora · preços Amazon ES (confirma no checkout)";
   let caption = seasonHeader() + `<b>${head} — AMAZON ES</b>\n<i>${sub}</i>\n\n`;
   rows.forEach((r, i) => {
     caption += `${NUMBERS[i]} <a href="${r.affUrl}">${escapeHtml(r.title)}</a> — <b>${r.imageLabel}</b>` +
@@ -1084,7 +1084,7 @@ async function publishDealOfDayIfDue(candidates) {
     const caption = seasonHeader() + `⭐ <b>DESTAQUE DO DIA</b> ⭐\n\n📦 <b>${escapeHtml(title)}</b>\n\n` +
       `⭐ ${String(pick.rating).replace(".", ",")} de 5 · um dos mais vendidos da Amazon ES\n` +
       `💶 <b>PREÇO ATUAL: ${formatEur(pick.price * VAT_ES_TO_PT)}</b>\n\n` +
-      `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n${PT_NOTE}\n` +
+      `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (confirma no checkout)</i>\n${PT_NOTE}\n` +
       tagsFor({ cat: pick.cat, store: "Amazon ES" }) + seasonFooter();
     ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML",
       reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }], miniAppButtonRow(), socialButtonsRow()] } })).ok;
@@ -1392,7 +1392,7 @@ const WELCOME_TEXT =
   `👋 <b>Bem-vindo ao Radar Descontos & Tech PT!</b>\n\n` +
   `Aqui encontras as melhores promoções de <b>tecnologia, gaming, casa e desporto</b> com envio para Portugal — escolhidas automaticamente, todos os dias.\n\n` +
   `📌 <b>Como funciona</b>\n` +
-  `• ❌ ANTES / ✅ AGORA — só publicamos descontos reais, com preços já com IVA português\n` +
+  `• ❌ ANTES / ✅ AGORA — só publicamos descontos reais, com preços confirmados na página da Amazon ES\n` +
   `• 🔥 Novas ofertas e mais vendidos a cada 20 minutos\n` +
   `• ⭐ Oferta do dia, por volta do almoço\n` +
   `• 🏆 Top 5 do dia, às 21h\n` +

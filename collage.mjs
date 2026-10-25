@@ -28,7 +28,7 @@ async function download(url) {
  * items: [{ imgUrl, priceLabel }]  (2 a 6 itens)
  * Devolve um Buffer JPEG.
  */
-export async function buildCollage(items, { title = "MAIS VENDIDOS HOJE", subtitle = "Amazon ES · preços com IVA PT incluído" } = {}) {
+export async function buildCollage(items, { title = "MAIS VENDIDOS HOJE", subtitle = "Amazon ES · preços confirmados no checkout" } = {}) {
   const sharp = require("sharp"); // lança erro se não estiver instalada → quem chama usa o plano B
   const n = Math.min(items.length, 6);
   const cols = n <= 4 && n !== 3 ? 2 : 3;
