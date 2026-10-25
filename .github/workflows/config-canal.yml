@@ -1,0 +1,34 @@
+name: Canal - configurar botão da Mini App e descrição (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: "escreve exatamente: publicar"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  configurar:
+    if: ${{ inputs.confirmar == 'publicar' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Define botão de menu do bot (abre a Mini App em qualquer chat privado)
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          curl -sS "https://api.telegram.org/bot${TOKEN}/setChatMenuButton" \
+            -H "Content-Type: application/json" \
+            -d '{"menu_button": {"type": "web_app", "text": "Abrir App", "web_app": {"url": "https://radar-miniapp.duartedeslandes86-052.workers.dev"}}}'
+
+      - name: Define descrição do canal (aparece no perfil do canal)
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
+        run: |
+          curl -sS "https://api.telegram.org/bot${TOKEN}/setChatDescription" \
+            --data-urlencode "chat_id=${CHAT}" \
+            --data-urlencode "description=Descontos reais e verificados em tech, casa e desporto. Mini App por setores: t.me/radardescontospt_bot/radar"

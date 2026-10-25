@@ -16,12 +16,20 @@ jobs:
     if: ${{ inputs.confirmar == 'publicar' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Enviar anúncio para o canal
+      - name: Enviar anúncio para o canal e fixar
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT: ${{ secrets.TELEGRAM_CHAT_ID || '-1003846917730' }}
         run: |
           TEXTO="$(printf '%s\n' '🧭 Novidade na Mini App do Radar!' '' 'Reorganizámos tudo por setores, para ser mais fácil de explorar:' '📱 Eletrónica & Tech · 🏡 Casa & Jardim · 🏃 Desporto & Ar Livre' '💄 Beleza & Saúde · 👕 Moda & Acessórios · 🚗 Automóvel' '' 'Com produtos de todas as lojas parceiras + Amazon.es, e um separador "Destaques" com os melhores descontos verificados do momento.' '' '👉 https://t.me/radardescontospt_bot/radar')"
-          curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+          RESP="$(curl -sS -f "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" \
-            --data-urlencode "text=${TEXTO}"
+            --data-urlencode "text=${TEXTO}")"
+          echo "$RESP"
+          MSG_ID="$(echo "$RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).result.message_id)}catch(e){}})")"
+          if [ -n "$MSG_ID" ]; then
+            curl -sS "https://api.telegram.org/bot${TOKEN}/pinChatMessage" \
+              --data-urlencode "chat_id=${CHAT}" \
+              --data-urlencode "message_id=${MSG_ID}" \
+              --data-urlencode "disable_notification=true"
+          fi

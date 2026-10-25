@@ -49,7 +49,12 @@ const MIN_DISCOUNT_PCT = 15;
 const VAT_ES_TO_PT = 1.23;
 const PT_NOTE = "📍 <i>Preço para entrega em Portugal. Se a app mostrar outro valor, confirma a morada de entrega no checkout.</i>";
 const MINIAPP_URL = "https://t.me/radardescontospt_bot/radar";
-const miniAppButtonRow = () => [{ text: "🧭 Ver mais na Mini App", url: MINIAPP_URL }];
+const CHANNEL_URL = "https://t.me/radardescontos_pt";
+const SHARE_URL = `https://t.me/share/url?url=${encodeURIComponent(CHANNEL_URL)}&text=${encodeURIComponent("Descontos reais, verificados, em tech/casa/desporto 👇")}`;
+const miniAppButtonRow = () => [
+  { text: "🧭 Mini App", url: MINIAPP_URL },
+  { text: "📤 Partilhar", url: SHARE_URL },
+];
 const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
 const DAILY_FILE = "daily_deals.json";
