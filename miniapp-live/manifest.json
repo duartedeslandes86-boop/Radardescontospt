@@ -1,0 +1,53 @@
+{
+"sectores": [
+{
+"id": "eletronica-tech",
+"label": "Eletrónica & Tech",
+"count": 5069,
+"file": "products-eletronica-tech.json",
+"size_kb": 2033.7
+},
+{
+"id": "casa-jardim",
+"label": "Casa & Jardim",
+"count": 5443,
+"file": "products-casa-jardim.json",
+"size_kb": 2303.2
+},
+{
+"id": "desporto-ar-livre",
+"label": "Desporto & Ar Livre",
+"count": 1301,
+"file": "products-desporto-ar-livre.json",
+"size_kb": 577.8
+},
+{
+"id": "beleza-saude",
+"label": "Beleza & Saúde",
+"count": 3421,
+"file": "products-beleza-saude.json",
+"size_kb": 1139.1
+},
+{
+"id": "moda-acessorios",
+"label": "Moda & Acessórios",
+"count": 2615,
+"file": "products-moda-acessorios.json",
+"size_kb": 1194.2
+},
+{
+"id": "automovel",
+"label": "Automóvel",
+"count": 253,
+"file": "products-automovel.json",
+"size_kb": 105.2
+},
+{
+"id": "outros",
+"label": "Outros",
+"count": 702,
+"file": "products-outros.json",
+"size_kb": 306.2
+}
+]
+}

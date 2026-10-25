@@ -100,24 +100,30 @@
     }
   }
 
-  function render(products, cat) {
+  function renderLoading() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '<div class="empty">A carregar…</div>';
+  }
+
+  function render(products) {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
     grid.style.gridTemplateColumns = '';
-    const list = products.filter(p => cat === 'Todos' || p.categoria === cat);
-    if (!list.length) {
+    if (!products.length) {
       grid.innerHTML = '<div class="empty">Sem ofertas de momento. Vê o canal para as últimas.</div>';
       return;
     }
-    for (const p of list) {
+    for (const p of products) {
       const card = document.createElement('div');
       card.className = 'card';
       const priceTxt = p.precoVerificado && typeof p.preco === 'number' ? euro(p.preco) : '';
       card.innerHTML = `
         <img src="${p.imagem}" alt="" loading="lazy">
+        <div class="store"></div>
         <div class="name"></div>
         <div class="price"></div>
         <a class="btn" href="#">Ver oferta</a>`;
+      card.querySelector('.store').textContent = p.loja || '';
       card.querySelector('.name').textContent = p.nome;
       card.querySelector('.price').textContent = priceTxt;
       const a = card.querySelector('.btn');
@@ -127,33 +133,65 @@
     }
   }
 
+  // cache de ficheiros já descarregados, para não voltar a pedir ao trocar de separador
+  const fileCache = {};
+  async function loadFile(file) {
+    if (fileCache[file]) return fileCache[file];
+    try {
+      const r = await fetch(file, { cache: 'no-store' });
+      const data = await r.json();
+      fileCache[file] = data;
+      return data;
+    } catch (e) { return []; }
+  }
+
   async function init() {
-    let products = [];
+    let manifest = { sectores: [] };
     let codes = [];
     try {
-      const r = await fetch('products.json', { cache: 'no-store' });
-      products = await r.json();
-    } catch (e) { products = []; }
+      const r = await fetch('manifest.json', { cache: 'no-store' });
+      manifest = await r.json();
+    } catch (e) { manifest = { sectores: [] }; }
     try {
       const r = await fetch('codigos.json', { cache: 'no-store' });
       codes = await r.json();
     } catch (e) { codes = []; }
-    const cats = ['Todos', ...new Set(products.map(p => p.categoria).filter(Boolean))];
+
     const tabs = document.getElementById('tabs');
-    cats.forEach((c, i) => {
+
+    // Separador "Destaques": melhores descontos verificados, carregado logo de início
+    const destaquesBtn = document.createElement('button');
+    destaquesBtn.className = 'tab on';
+    destaquesBtn.textContent = 'Destaques';
+    destaquesBtn.onclick = async () => {
+      setActive(destaquesBtn);
+      renderLoading();
+      render(await loadFile('destaques.json'));
+    };
+    tabs.appendChild(destaquesBtn);
+
+    // Um separador por setor (Awin, todas as lojas, + Amazon.es), carregado só quando é aberto
+    manifest.sectores.forEach(s => {
       const b = document.createElement('button');
-      b.className = 'tab' + (i === 0 ? ' on' : '');
-      b.textContent = c;
-      b.onclick = () => { setActive(b); render(products, c); };
+      b.className = 'tab';
+      b.textContent = `${s.label} (${s.count})`;
+      b.onclick = async () => {
+        setActive(b);
+        renderLoading();
+        render(await loadFile(s.file));
+      };
       tabs.appendChild(b);
     });
-    // Separador próprio para códigos: fora do "Todos" e das categorias
+
+    // Separador próprio para códigos: fora dos setores
     const codeTab = document.createElement('button');
     codeTab.className = 'tab';
     codeTab.textContent = 'Códigos';
     codeTab.onclick = () => { setActive(codeTab); renderCodes(codes); };
     tabs.appendChild(codeTab);
-    render(products, 'Todos');
+
+    renderLoading();
+    render(await loadFile('destaques.json'));
   }
   init();
 </script>

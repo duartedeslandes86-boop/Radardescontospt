@@ -20,8 +20,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Validar JSON do catálogo
-        run: node -e "const p=require('./miniapp-live/products.json'); if(!Array.isArray(p)||p.length===0) throw new Error('catálogo vazio'); console.log('produtos:', p.length)"
+      - name: Validar JSON do catálogo (manifesto + um ficheiro por setor)
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = require('./miniapp-live/manifest.json');
+            if (!Array.isArray(m.sectores) || m.sectores.length === 0) throw new Error('manifesto vazio');
+            let total = 0;
+            for (const s of m.sectores) {
+              const arr = require('./miniapp-live/' + s.file);
+              if (!Array.isArray(arr) || arr.length !== s.count) throw new Error('inconsistência em ' + s.file);
+              total += arr.length;
+            }
+            const d = require('./miniapp-live/destaques.json');
+            if (!Array.isArray(d) || d.length === 0) throw new Error('destaques vazio');
+            console.log('setores:', m.sectores.length, '| produtos:', total, '| destaques:', d.length);
+          "
       - name: Teste (sem publicar)
         if: ${{ inputs.modo == 'teste' }}
         run: npx --yes wrangler@4 deploy --config wrangler.miniapp.toml --dry-run --outdir dist-miniapp

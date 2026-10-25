@@ -48,6 +48,8 @@ const MIN_DISCOUNT_PCT = 15;
 // Preço para Portugal = sem IVA × 1,23 (IVA PT). Se a página vier com IVA (entrega em Espanha/Portugal), tiramos o IVA antes.
 const VAT_ES_TO_PT = 1.23;
 const PT_NOTE = "📍 <i>Preço para entrega em Portugal. Se a app mostrar outro valor, confirma a morada de entrega no checkout.</i>";
+const MINIAPP_URL = "https://t.me/radardescontospt_bot/radar";
+const miniAppButtonRow = () => [{ text: "🧭 Ver mais na Mini App", url: MINIAPP_URL }];
 const TOP_HOUR_LISBON = 21;
 const DB_FILE = "sent_deals.json";
 const DAILY_FILE = "daily_deals.json";
@@ -597,6 +599,7 @@ async function publishDailyTopIfDue() {
       text: `${MEDALS[i]} ${d.currentPrice} (-${d.discountPct}%) · ${d.title.slice(0, 26)}`,
       url: d.affUrl
     }]);
+    buttons.push(miniAppButtonRow());
     ok = (await telegram("sendMessage", {
       text: caption,
       parse_mode: "HTML",
@@ -643,7 +646,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
     `⚡ <i>${vatNote ? "Envio para Portugal (IVA PT incluído) | " : ""}Stock limitado</i>` +
     (vatNote ? `\n${PT_NOTE}` : "") +
     (tags ? `\n${tags}` : "") + seasonFooter();
-  const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }]] };
+  const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }], miniAppButtonRow()] };
 
   let ok = false;
   if (imgUrl) {
@@ -780,6 +783,7 @@ async function sendGrid(rows, caption, collageTitle, collageSubtitle) {
   for (let i = 0; i < rows.length; i += 2) {
     buttons.push(rows.slice(i, i + 2).map((r, j) => ({ text: `${NUMBERS[i + j]} ${r.buttonLabel}`, url: r.affUrl })));
   }
+  buttons.push(miniAppButtonRow());
   let ok = false;
   try {
     const image = await buildCollage(rows.map(r => ({ imgUrl: r.imgUrl, priceLabel: r.imageLabel })), { title: collageTitle, ...(collageSubtitle ? { subtitle: collageSubtitle } : {}) });
@@ -1068,7 +1072,7 @@ async function publishDealOfDayIfDue(candidates) {
       `👉 <a href="${affUrl}">Ver na Amazon ES</a>\n\n⚡ <i>Envio para Portugal (IVA PT incluído)</i>\n${PT_NOTE}\n` +
       tagsFor({ cat: pick.cat, store: "Amazon ES" }) + seasonFooter();
     ok = (await telegram("sendPhoto", { photo: pick.imgUrl, caption, parse_mode: "HTML",
-      reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }]] } })).ok;
+      reply_markup: { inline_keyboard: [[{ text: "🛒 Ver na Amazon", url: affUrl }], miniAppButtonRow()] } })).ok;
     if (ok) {
       history._meta.featured[pick.asin] = todayStr;
       console.log(`Destaque do dia: ${pick.asin} | ${title}`);
