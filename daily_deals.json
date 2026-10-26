@@ -1,7 +1,48 @@
 {
   "date": "2026-10-26",
   "lastSummaryDate": "2026-10-25",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "quatroelementos:nike-nocta-fleece-hoodie-hm5762-104",
+      "store": "4 Elementos",
+      "title": "Camisola com capuz Nike NOCTA Fleece HM5762-104",
+      "currentPrice": "78,00€",
+      "oldPrice": "119,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-nocta-fleece-hoodie-hm5762-104",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/12330.jpg?v=1768082087&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:nike-acg-air-exploraid-fv2925-200",
+      "store": "4 Elementos",
+      "title": "Nike ACG Air Exploraid FV2925-200",
+      "currentPrice": "91,00€",
+      "oldPrice": "139,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-acg-air-exploraid-fv2925-200",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/10049.jpg?v=1768074334&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:nike-dunk-low-qs-fq6965-600",
+      "store": "4 Elementos",
+      "title": "Nike Dunk Low QS FQ6965-600",
+      "currentPrice": "84,00€",
+      "oldPrice": "129,99€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fnike-dunk-low-qs-fq6965-600",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/8427.jpg?v=1768061131&width=1200&format=pjpg"
+    },
+    {
+      "asin": "quatroelementos:diemme-di2201ra02-ramon",
+      "store": "4 Elementos",
+      "title": "Diemme DI2201RA02 Ramon",
+      "currentPrice": "240,00€",
+      "oldPrice": "369,00€",
+      "discountPct": 35,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fdiemme-di2201ra02-ramon",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/6959.jpg?v=1768036541&width=1200&format=pjpg"
+    }
+  ],
   "ottocastDate": "2026-10-26",
   "cheapSlots": [
     12
