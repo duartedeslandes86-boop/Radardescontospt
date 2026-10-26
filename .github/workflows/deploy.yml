@@ -1,0 +1,64 @@
+name: Radar Bot - build e deploy Oracle VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*.py"
+      - requirements.txt
+      - Dockerfile
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: radar-bot-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e push da imagem
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/duartedeslandes86-boop/radar-bot:latest
+            ghcr.io/duartedeslandes86-boop/radar-bot:${{ github.sha }}
+
+      - name: Deploy na Oracle VM
+        uses: appleboy/ssh-action@v1
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: TELEGRAM_BOT_TOKEN,GHCR_PAT
+          script: |
+            set -e
+            echo "$GHCR_PAT" | docker login ghcr.io -u duartedeslandes86-boop --password-stdin
+            docker pull ghcr.io/duartedeslandes86-boop/radar-bot:latest
+            docker rm -f radar-bot 2>/dev/null || true
+            mkdir -p /opt/radar-bot/data
+            docker run -d --name radar-bot --restart unless-stopped \
+              -v /opt/radar-bot/data:/app/data \
+              -e HISTORICO_DB=/app/data/historico.db \
+              -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+              ghcr.io/duartedeslandes86-boop/radar-bot:latest
+            docker image prune -f
