@@ -1,0 +1,4 @@
+python-telegram-bot>=21.0,<22
+playwright==1.47.0
+playwright-stealth>=1.0.6,<2
+aiosqlite==0.20.0
