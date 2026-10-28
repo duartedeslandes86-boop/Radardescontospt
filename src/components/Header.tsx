@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const isAutopilotOn = autopilot?.active ?? false;
   const channelHandle = status?.telegram?.channel?.username || '@radardescontos_pt';
-  const amazonTag = status?.amazonTag || 'radardescontospt-21';
+  const amazonTag = status?.amazonTag || 'radardescon08-21';
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-md sticky top-0 z-40 shadow-xl">
