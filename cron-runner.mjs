@@ -17,7 +17,7 @@ import { CATEGORIES, tagsFor, isLowValue, shortenTitle, seasonFor } from "./cont
 // ---------------------------------------------------------------------------
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-1003846917730";
-const TAG = process.env.AMAZON_PARTNER_TAG || "radardescontospt-21";
+const TAG = process.env.AMAZON_PARTNER_TAG || "radardescon08-21";
 // Awin: preparado para quando a conta for aprovada (ainda não é usado)
 const AWIN_PUBLISHER_ID = process.env.AWIN_PUBLISHER_ID || "3124493";
 const AWIN_FEED_URL = process.env.AWIN_FEED_URL || ""; // link do Create-a-Feed (Secret)
