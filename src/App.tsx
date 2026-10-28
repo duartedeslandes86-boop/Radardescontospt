@@ -301,7 +301,7 @@ export default function App() {
     }
   };
 
-  const activeTag = status?.amazonTag || 'radardescontospt-21';
+  const activeTag = status?.amazonTag || 'radardescon08-21';
   const channelHandle = status?.telegram?.channel?.username || '@radardescontos_pt';
 
   return (
