@@ -125,7 +125,8 @@
   ],
   "ottocastDate": "2026-10-29",
   "cheapSlots": [
-    12
+    12,
+    20
   ],
   "recordAlerts": 0
 }
