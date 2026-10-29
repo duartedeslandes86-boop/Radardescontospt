@@ -684,7 +684,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
 const POST_HOURS = [9, 22];
 const inPostHours = () => lisbonHour >= POST_HOURS[0] && lisbonHour < POST_HOURS[1];
 const MIN_GAP_MIN = 15;          // evita duas publicações seguidas se o bot correr 2x no mesmo período
-const GRID_SIZE = 4;             // até 4 produtos por publicação
+const GRID_SIZE = 6;             // até 6 produtos por publicação
 const GRID_MIN_PRICE = 20;
 const GRID_REPEAT_HOURS = 72;    // um produto só volta a uma grelha passados 3 dias…
 const GRID_MIN_REPEAT_HOURS = 12; // …ou 12 horas, se não houver produtos novos suficientes
