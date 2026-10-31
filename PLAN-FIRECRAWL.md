@@ -77,3 +77,9 @@ Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; 
 - [x] T2 simulação 20 corridas: 16/20 tech (80%), 0 repetições seguidas, todas as categorias existem em `CATEGORIES`; `node --check` OK
 - [ ] T3 corrida de ensaio (dry-run) — **por fazer**: o bot não foi executado com a nova rotação
 - [ ] Merge para `main` — só com o "sim" do Duarte
+
+## Estado — função de verificação (31/10)
+- [x] Passo 2: `verify-price.mjs` (`parseAmazonPT`, `verifyAmazonPrice`) — **não está ligado ao bot**. Endpoint confirmado na documentação: `POST https://api.firecrawl.dev/v2/scrape`.
+- [x] Teste do leitor em 5 páginas PT reais (guardadas) + 7 casos simulados (preço certo, preço do bot errado, variantes, sem preço, HTTP 429, falha de rede, ASIN inválido): todos passaram.
+- [ ] **Não testado**: chamada real à API com a chave (créditos por página no modo markdown por confirmar). Também por provar: ligação ao bot (passo 3) e dry-run completo com verificação.
+- Nota: 2 de 5 páginas não têm "Preço recomendado" → sem ANTES verificável → o bot não pode anunciar desconto nesses artigos.
