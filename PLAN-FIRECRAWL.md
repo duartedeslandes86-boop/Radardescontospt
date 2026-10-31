@@ -83,3 +83,11 @@ Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; 
 - [x] Teste do leitor em 5 páginas PT reais (guardadas) + 7 casos simulados (preço certo, preço do bot errado, variantes, sem preço, HTTP 429, falha de rede, ASIN inválido): todos passaram.
 - [ ] **Não testado**: chamada real à API com a chave (créditos por página no modo markdown por confirmar). Também por provar: ligação ao bot (passo 3) e dry-run completo com verificação.
 - Nota: 2 de 5 páginas não têm "Preço recomendado" → sem ANTES verificável → o bot não pode anunciar desconto nesses artigos.
+
+## Estado — ligação ao bot (31/10)
+- [x] Passo 3 (código): em `cron-runner.mjs`, ofertas **Amazon ES** só entram se `verifyAmazonPrice` confirmar o preço PT; máx. 5 verificações por corrida (`VERIFY_MAX_PER_RUN`); recusa → não publica, motivo no log e no resumo do admin. **Desligada por defeito** (`VERIFY_PRICES` = variável do GitHub, vazia = desligada). `radar-auto.yml` passa `FIRECRAWL_API_KEY` e `VERIFY_PRICES`.
+- [x] `node --check` OK; 2 ensaios em cópia (`DRY_RUN`), com a verificação desligada e ligada, sem erros.
+- [ ] **Não provado**: nenhuma oferta Amazon chegou ao ponto de verificação nos ensaios (0 abaixo do histórico), por isso o ramo da verificação dentro do ciclo nunca correu com um candidato real. Nem a chamada à API com a chave.
+- [ ] Cobre só as ofertas (deals). Grelhas "TOP", destaque do dia e montra ainda **não** são verificadas.
+- [ ] Histórico próprio de preços (passo 4) por fazer.
+- Para ligar (depois do merge no `main`): GitHub → Settings → Secrets and variables → Actions → Variables → `VERIFY_PRICES` = `true`. Para desligar: apagar ou pôr `false`.
