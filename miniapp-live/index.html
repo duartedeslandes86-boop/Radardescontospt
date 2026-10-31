@@ -124,7 +124,7 @@
       card.className = 'card';
       const priceTxt = p.precoVerificado && typeof p.preco === 'number' ? euro(p.preco) : '';
       card.innerHTML = `
-        <img src="${p.imagem}" alt="" loading="lazy">
+        ${p.imagem ? `<img src="${p.imagem}" alt="" loading="lazy">` : ""}
         <div class="store"></div>
         <div class="name"></div>
         <div class="price"></div>
