@@ -12,6 +12,14 @@ export const CATEGORIES = [
   "projetores", "autotech", "fitness", "smarthome", "energia", "drones",
   "wearables", "print3d", "pcgaming", "cozinhagadgets", "mobilidade"
 ];
+// Foco tech (pedido do Duarte, 31/10/2026): rotação com 4 categorias tech por cada 1 de casa/desporto.
+// "cozinhagadgets" conta como tech (fritadeiras, cafeteiras, vácuo); "kitchen" genérica fica fora da rotação.
+export const TECH_CATS = [
+  "electronics", "computers", "videogames", "projetores", "autotech", "smarthome",
+  "drones", "wearables", "print3d", "pcgaming", "cozinhagadgets", "energia"
+];
+const NON_TECH_ROT = ["fitness", "sports", "appliances"];
+export const ROTATION = TECH_CATS.flatMap((c, i) => (i + 1) % 4 === 0 ? [c, NON_TECH_ROT[(i + 1) / 4 - 1]] : [c]);
 // "personalcare" é uma categoria do bot (não da Amazon): só aparelhos de cuidado pessoal
 // (escovas elétricas, máquinas de barbear/depilar, secadores) — ver CAT_SOURCES no cron-runner.
 

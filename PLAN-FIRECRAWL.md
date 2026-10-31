@@ -37,7 +37,7 @@ Antes de publicar um artigo da Amazon ES, confirmar o preço real para Portugal 
 
 ---
 
-# Foco TECH com bons preços (proposta — aguarda "sim" do Duarte)
+# Foco TECH com bons preços (implementado no ramo plan-firecrawl; NÃO está no main)
 
 ## Pedido confirmado
 Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; só artigos com desconto real e ANTES verificável (mínimo 15%, já é o valor atual `MIN_DISCOUNT_PCT`); sem repetir artigos nem só os mais vendidos.
@@ -67,3 +67,13 @@ Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; 
 ## Riscos
 - Menos casa/desporto pode baixar a variedade percebida: ver resultados ao fim de 1 semana.
 - Algumas categorias tech têm poucos descontos ≥ 15%: o bot pode ficar dias sem publicar nessas rondas (preferível a publicar mau preço).
+
+## Decisão 31/10 (Duarte): "cozinha sim, se for produto tech"
+- `cozinhagadgets` (fritadeiras, cafeteiras, vácuo) entra como tech; `kitchen` genérica fica fora da rotação.
+- Não-tech na rotação: fitness, sports, appliances (1 em cada 5).
+
+## Estado T1–T3
+- [x] T1 backups guardados fora do repositório (scratchpad); diff só em `content.mjs` (+8) e `cron-runner.mjs` (3 trechos)
+- [x] T2 simulação 20 corridas: 16/20 tech (80%), 0 repetições seguidas, todas as categorias existem em `CATEGORIES`; `node --check` OK
+- [ ] T3 corrida de ensaio (dry-run) — **por fazer**: o bot não foi executado com a nova rotação
+- [ ] Merge para `main` — só com o "sim" do Duarte
