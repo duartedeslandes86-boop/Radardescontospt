@@ -91,3 +91,12 @@ Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; 
 - [ ] Cobre só as ofertas (deals). Grelhas "TOP", destaque do dia e montra ainda **não** são verificadas.
 - [ ] Histórico próprio de preços (passo 4) por fazer.
 - Para ligar (depois do merge no `main`): GitHub → Settings → Secrets and variables → Actions → Variables → `VERIFY_PRICES` = `true`. Para desligar: apagar ou pôr `false`.
+
+## Testes finais (31/10, em cópia, DRY_RUN — nada publicado)
+- [x] Ciclo completo com `VERIFY_PRICES=true` e 2 candidatos Amazon simulados, **API Firecrawl real (sem chave)**: 
+  - Switch Sports Resort: esperado 50,73 € = página 50,73 € → `OK`, oferta aceite.
+  - Finocam agenda (preço do bot propositadamente errado, 11,07 €): página 13,21 € → `RECUSADA (preco_diferente)`, **não publicada**; resumo mostra `naoVerificado: 1`.
+- [x] Verificação desligada (por defeito): sem chamadas ao Firecrawl, comportamento anterior.
+- [x] Leitor testado em 5 páginas reais + 7 casos simulados (ver acima).
+- Limitação do teste: os candidatos foram **injetados** (a Amazon pediu captcha ao servidor onde testei, e não havia descontos reais abaixo do histórico).
+- [ ] Por provar: chamada **com a chave** `FIRECRAWL_API_KEY` no GitHub Actions; créditos por página; grelhas TOP/destaque/montra sem verificação; histórico próprio (passo 4).
