@@ -9,6 +9,7 @@
 import fs from "fs";
 import { buildCollage } from "./collage.mjs";
 import { fetchAwinCandidates, fetchOttocastPicks, OTTOCAST_STORE_LINK } from "./awin.mjs";
+import { verifyAmazonPrice } from "./verify-price.mjs";
 import { BRANDS, fetchBrandDeals, brandStoreLink } from "./brands.mjs";
 import { CATEGORIES, ROTATION, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
 
@@ -44,6 +45,10 @@ const SHOWCASE_GAP_SEC = Number(process.env.SHOWCASE_GAP_SEC || 40);
 const PUBLISH_WELCOME = process.env.PUBLISH_WELCOME === "true"; // publicar e fixar a mensagem de boas-vindas
 const MAX_POSTS_BASE = Number(process.env.MAX_POSTS_PER_RUN || 2);
 const MIN_DISCOUNT_PCT = 15;
+// Verificação do preço PT na página da Amazon (Firecrawl) antes de publicar. DESLIGADA por defeito.
+// Ligar: variável VERIFY_PRICES=true no GitHub (Settings → Variables). Máx. de verificações por corrida: VERIFY_MAX_PER_RUN.
+const VERIFY_PRICES = process.env.VERIFY_PRICES === "true";
+const VERIFY_MAX_PER_RUN = Number(process.env.VERIFY_MAX_PER_RUN || 5);
 // Preços da Amazon guardados SEM IVA (o GitHub está nos EUA e a Amazon.es mostra-lhe preços de exportação, sem IVA).
 // Preço para Portugal = sem IVA × 1,23 (IVA PT). Se a página vier com IVA (entrega em Espanha/Portugal), tiramos o IVA antes.
 const VAT_ES_TO_PT = 1.23;
@@ -1442,7 +1447,8 @@ async function run() {
     if (awin[i]) candidates.push(awin[i]);
   }
 
-  const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0, poucoInteresse: 0 };
+  const stats = { bloqueada: 0, usado: 0, semStock: 0, repetido: 0, semDesconto: 0, poucoInteresse: 0, naoVerificado: 0 };
+  let verificacoes = 0;
   let published = 0;
 
   if (PUBLISH_WELCOME) await publishWelcome();
@@ -1460,6 +1466,16 @@ async function run() {
     if (isLowValue(c.title)) { stats.poucoInteresse++; continue; }
     const prices = computePrices(c.currentPrice, c.oldPrice, c.pricesIncludeEsVat !== false);
     if (!prices) { stats.semDesconto++; continue; }
+    // Só Amazon ES: confirma o preço PT na página antes de aceitar a oferta (se a verificação estiver ligada).
+    // Sem confirmação (erro, limite de corridas, preço diferente, variantes) → NÃO publica, e o motivo fica no log.
+    if (VERIFY_PRICES && /amazon/i.test(String(c.store || c.url))) {
+      if (verificacoes >= VERIFY_MAX_PER_RUN) { stats.naoVerificado++; continue; }
+      verificacoes++;
+      const esperado = parseEuro(c.currentPrice) * (c.pricesIncludeEsVat !== false ? VAT_ES_TO_PT : 1);
+      const v = await verifyAmazonPrice(id, esperado);
+      console.log(`Verificação ${id}: ${v.ok ? "OK" : "RECUSADA"} (${v.reason}) esperado ${esperado.toFixed(2)}€ · página ${v.price ?? "?"}€ · ${v.checkedAt}`);
+      if (!v.ok) { stats.naoVerificado++; continue; }
+    }
     deals.push({ ...c, id, prices, title: shortenTitle(cleanAndTranslateTitle(c.title), 90) });
   }
 
@@ -1540,6 +1556,7 @@ async function run() {
     reasons.push(`${lastSeenItems.length} produtos lidos, ${candidates.length} abaixo do preço do histórico`);
     if (stats.semDesconto) reasons.push(`${stats.semDesconto} com desconto abaixo de ${MIN_DISCOUNT_PCT}%`);
     if (stats.repetido) reasons.push(`${stats.repetido} já publicadas`);
+    if (stats.naoVerificado) reasons.push(`${stats.naoVerificado} sem preço confirmado na página PT`);
     reasons.push(...runNotes);
     const text = `🤖 <b>Radar PT — ${String(lisbonHour).padStart(2, "0")}h</b>\nNenhuma promoção publicada neste ciclo.\n\n` +
       reasons.map(r => `• ${escapeHtml(r)}`).join("\n");
