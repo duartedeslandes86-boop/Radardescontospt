@@ -57,11 +57,18 @@ const LOW_VALUE = new RegExp([
   "c[aá]psulas", "bolsas de basura", "sacos do lixo", "recambios?", "recargas?",
   "gel de (ducha|ba[ñn]o|banho)", "champ[uú]", "champ[oô]", "desodorante", "pasta de dientes",
   "golosinas", "caf[eé] en grano", "caf[eé] molido", "chocolate", "galletas", "aceite de oliva",
-  "comida para", "pienso", "arena para gatos", "cerveza", "vino"
+  "comida para", "pienso", "arena para gatos", "cerveza", "vino",
+  // Cartões-oferta, subscrições e conteúdo digital: não são produtos tech
+  "tarjetas? (de )?regalo", "cart[aã]o[- ]presente", "gift ?cards?", "playstation store", "nintendo eshop",
+  "nintendo switch online", "suscripci[oó]n", "subscri[cç][aã]o", "paquete de expansi[oó]n", "pacote de expans[aã]o",
+  "\\bdlc\\b", "game ?pass", "playstation plus", "c[oó]digo digital"
 ].join("|"), "i");
 
+// Título sem sentido para o canal: uma só palavra ou nome de empresa (ex.: "R.D.S. Industries, Inc.")
+const BAD_TITLE = /(?:^|[,\s])(?:inc|ltd|llc|gmbh|s\.?l\.?|s\.?a\.?)\.?$/i;
 export function isLowValue(title = "") {
-  return LOW_VALUE.test(title);
+  const t = String(title).trim();
+  return LOW_VALUE.test(t) || t.split(/\s+/).length < 2 || BAD_TITLE.test(t);
 }
 
 // Título curto: corta descrições compridas da Amazon ("Produto X, com Y, Z | ...")
