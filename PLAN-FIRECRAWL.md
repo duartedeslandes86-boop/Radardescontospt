@@ -34,3 +34,36 @@ Antes de publicar um artigo da Amazon ES, confirmar o preço real para Portugal 
 ## Estado
 - [ ] Chave `FIRECRAWL_API_KEY` criada pelo Duarte
 - [ ] Passo 0 em curso (1 de 3 ASINs lidos na página PT)
+
+---
+
+# Foco TECH com bons preços (proposta — aguarda "sim" do Duarte)
+
+## Pedido confirmado
+Pesquisar/publicar sobretudo tech (~80%), casa/desporto em pequena percentagem; só artigos com desconto real e ANTES verificável (mínimo 15%, já é o valor atual `MIN_DISCOUNT_PCT`); sem repetir artigos nem só os mais vendidos.
+
+## O que o código faz hoje (lido, não alterado)
+- `content.mjs` → `CATEGORIES`: 24 categorias em rotação igual. Tech: electronics, computers, videogames, projetores, autotech, smarthome, drones, wearables, print3d, pcgaming (+ energia, com tag tech). Não-tech: kitchen, tools, sports, appliances, toys, lighting, office, lawn-garden, personalcare, fitness, cozinhagadgets, mobilidade.
+- `cron-runner.mjs:518` rotação das ofertas (`CATEGORIES_PER_RUN`, por defeito 1 categoria por corrida).
+- `cron-runner.mjs:773` rotação dos posts "TOP" (grelha) usa `[...new Set(CATEGORIES)]` (duplicados são removidos).
+- Desconto mínimo: `MIN_DISCOUNT_PCT = 15` (linha 46); máximo 80.
+
+## Alteração mínima proposta
+1. `content.mjs`: acrescentar `TECH_CATS` (lista acima) e uma ordem de rotação `ROTATION` com 4 categorias tech por cada 1 não-tech (ex.: sports/fitness/kitchen a alternar). `CATEGORIES` fica igual (usada para etiquetas e títulos).
+2. `cron-runner.mjs`: as duas rotações (linhas 518 e 773) passam a ler `ROTATION` em vez de `CATEGORIES`. Nada mais muda.
+3. Sem alterar desconto mínimo; ANTES vem do preço recomendado na página PT, confirmado com Firecrawl antes de publicar.
+
+## Prova
+| # | Passo | Prova |
+|---|-------|-------|
+| T1 | Backup de `content.mjs` e `cron-runner.mjs` | Cópias `.bak` + `git diff` só nas linhas previstas |
+| T2 | Simular 20 corridas da rotação sem publicar | Contagem: ≥ 75% das categorias são tech; nenhuma categoria é repetida duas vezes seguidas |
+| T3 | Corrida de ensaio (dry-run) | Lista de candidatos só com desconto ≥ 15% e ANTES presente |
+
+## Fora do âmbito (precisa de "sim" separado)
+- Retirar "Stock limitado" dos posts Amazon (sem escassez inventada) — linhas 660, 1015, 1045 de `cron-runner.mjs`.
+- Posts Awin/ALLPOWERS/Tenways não mudam.
+
+## Riscos
+- Menos casa/desporto pode baixar a variedade percebida: ver resultados ao fim de 1 semana.
+- Algumas categorias tech têm poucos descontos ≥ 15%: o bot pode ficar dias sem publicar nessas rondas (preferível a publicar mau preço).
