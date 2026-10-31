@@ -227,6 +227,7 @@ async function telegramPhotoUpload(buffer, fields) {
 // ---------------------------------------------------------------------------
 function decodeEntities(s = "") {
   return s
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return m; } }) // &#x27; → '
     .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
 }
@@ -283,6 +284,17 @@ const TRANSLATIONS = [
   [/(?<!\p{L})Crema de D[ií]a(?!\p{L})/giu, "Creme de Dia"],
   // Marcas que a tradução automática da Amazon estraga
   [/(?<!\p{L})Tampa (C\d{2,4}\w*)/gu, "Tapo $1"],
+  // Espanhol/brasileiro que a Amazon deixa nos títulos → PT-PT
+  [/(?<!\p{L})Tarjetas? (?:de )?Regalo(?!\p{L})/giu, "Cartão-presente"],
+  [/(?<!\p{L})Paquete de expansi[oó]n(?!\p{L})/giu, "Pacote de expansão"],
+  [/(?<!\p{L})Suscripci[oó]n(?!\p{L})/giu, "Subscrição"],
+  [/(?<!\p{L})cancelaci[oó]n de ruido(?!\p{L})/giu, "cancelamento de ruído"],
+  [/(?<!\p{L})sem fio(?!s)(?!\p{L})/giu, "sem fios"],
+  [/(?<!\p{L})color(?!\p{L})/giu, "cor"],
+  [/(?<!\p{L})Geladeira(?!\p{L})/giu, "Frigorífico"],
+  [/(?<!\p{L})Fones? de ouvido(?!\p{L})/giu, "Auscultadores"],
+  [/(?<!\p{L})Celulares(?!\p{L})/giu, "Telemóveis"],
+  [/(?<!\p{L})Celular(?!\p{L})/giu, "Telemóvel"],
   [/(?<!\p{L})Videojuegos?(?!\p{L})/giu, "Videojogo"],
   [/(?<!\p{L})Juego de(?!\p{L})/giu, "Conjunto de"],
   [/(?<!\p{L})Juegos?(?!\p{L})/giu, "Jogo"],
