@@ -662,7 +662,7 @@ async function publishDeal(affUrl, store, title, prices, imgUrl, vatNote, { tags
     `✅ <b>AGORA: ${prices.currentPrice}</b> <i>(-${prices.discountPct}% DESCONTO!)</i>\n` +
     historyNote(refDays) + `\n` +
     `👉 <a href="${affUrl}">Ver oferta na ${escapeHtml(store)}</a>\n\n` +
-    `⚡ <i>${vatNote ? "Envio para Portugal (confirma no checkout) | " : ""}Stock limitado</i>` +
+    `⚡ <i>${vatNote ? "Envio para Portugal (confirma no checkout)" : "Stock limitado"}</i>` +
     (vatNote ? `\n${PT_NOTE}` : "") +
     (tags ? `\n${tags}` : "") + seasonFooter();
   const reply_markup = { inline_keyboard: [[{ text: `🛒 Comprar na ${store}`, url: affUrl }], miniAppButtonRow(), socialButtonsRow()] };
@@ -1017,7 +1017,7 @@ async function publishBestsellerGrid({ forceCats = null } = {}) {
       (r.rating ? ` · ⭐${String(r.rating).replace(".", ",")}` : "") + `\n`;
   });
   const tags = [...new Set((cheap ? ["#achados", "#barato"] : []).concat(rows.flatMap(r => tagsFor({ cat: r.cat, store: "Amazon ES" }).split(" "))))].join(" ");
-  caption += `\n⚡ <i>Envio para Portugal | Stock limitado</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
+  caption += `\n⚡ <i>Envio para Portugal (confirma no checkout)</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
 
   const collageTitle = SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : ((cheap || theme || forceCats) ? head.replace(/^\S+\s/, "") : "MAIS VENDIDOS HOJE");
   const ok = await sendGrid(rows, caption, collageTitle);
@@ -1047,7 +1047,7 @@ async function publishDealsGrid(deals) {
       `      ❌ <s>${r.prices.oldPrice}</s> ✅ <b>${r.prices.currentPrice}</b> (-${r.prices.discountPct}%)\n`;
   });
   const tags = [...new Set(rows.flatMap(r => tagsFor({ cat: r.cat, store: r.store }).split(" ")))].join(" ");
-  caption += `\n📉 <i>Preços abaixo do mais baixo que registámos</i>\n⚡ <i>Stock limitado</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
+  caption += `\n📉 <i>Preços abaixo do mais baixo que registámos</i>\n${PT_NOTE}\n${tags}` + seasonFooter();
   return sendGrid(rows, caption, SEASON?.label ? SEASON.label.replace(/^\S+\s/, "") : "DESCIDAS DE PREÇO");
 }
 
