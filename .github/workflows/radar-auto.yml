@@ -82,6 +82,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_ADMIN_CHAT_ID: ${{ vars.TELEGRAM_ADMIN_CHAT_ID || secrets.TELEGRAM_ADMIN_CHAT_ID }}
           AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          VERIFY_PRICES: ${{ vars.VERIFY_PRICES || 'false' }}
           AWIN_PUBLISHER_ID: ${{ secrets.AWIN_PUBLISHER_ID }}
           AWIN_FEED_URL: ${{ secrets.AWIN_FEED_URL }}
           FORCE_TOP_DAY: ${{ inputs.force_top_day && 'true' || 'false' }}
