@@ -10,7 +10,7 @@ import fs from "fs";
 import { buildCollage } from "./collage.mjs";
 import { fetchAwinCandidates, fetchOttocastPicks, OTTOCAST_STORE_LINK } from "./awin.mjs";
 import { BRANDS, fetchBrandDeals, brandStoreLink } from "./brands.mjs";
-import { CATEGORIES, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
+import { CATEGORIES, ROTATION, tagsFor, isLowValue, shortenTitle, seasonFor } from "./content.mjs";
 
 // ---------------------------------------------------------------------------
 // Configuração — o token do bot vem SÓ do Secret do GitHub (nunca escrito no código)
@@ -515,9 +515,9 @@ function pruneHistory() {
 let lastSeenItems = []; // produtos lidos neste ciclo, pela ordem do ranking
 
 async function fetchCandidateDeals() {
-  const start = (history._meta.nextCategory || 0) % CATEGORIES.length;
-  const cats = Array.from({ length: Math.min(CATEGORIES_PER_RUN, CATEGORIES.length) }, (_, i) => CATEGORIES[(start + i) % CATEGORIES.length]);
-  history._meta.nextCategory = (start + cats.length) % CATEGORIES.length;
+  const start = (history._meta.nextCategory || 0) % ROTATION.length;
+  const cats = Array.from({ length: Math.min(CATEGORIES_PER_RUN, ROTATION.length) }, (_, i) => ROTATION[(start + i) % ROTATION.length]);
+  history._meta.nextCategory = (start + cats.length) % ROTATION.length;
 
   const seenNow = new Map();
   for (const [i, cat] of cats.entries()) {
@@ -770,7 +770,7 @@ function pickGrid({ cheap = false, cats = null } = {}) {
   const byCat = new Map();
   for (const it of ok) (byCat.get(it.cat) || byCat.set(it.cat, []).get(it.cat)).push(it);
   // Categoria-tema em rotação: a seguir à última usada, a primeira com pelo menos 3 produtos
-  const order = [...new Set(CATEGORIES)];
+  const order = [...new Set(ROTATION)];
   const start = order.indexOf(history._meta.lastGridCat) + 1;
   // Preferência: categoria com 4 produtos; se nenhuma tiver 4, a primeira com 3; senão, com 2
   let theme = null;
