@@ -147,7 +147,32 @@ if (dailyData.date !== todayStr) {
 // ---------------------------------------------------------------------------
 let telegramOk = 0, telegramFail = 0; // para o workflow ficar vermelho se o Telegram recusar tudo
 
+// Publicidade: todo o post do canal com ligações de afiliado começa por "Publicidade" e leva #Publicidade #Ad;
+// com links Amazon leva também a frase oficial do Programa de Associados (ver REGRAS-LEGAIS-PUBLICACAO.md).
+const AD_HEAD = "📢 <b>Publicidade</b> · ligações de afiliado: ganhamos comissão se comprares, sem custo extra para ti.\n\n";
+const AD_TAGS = "#Publicidade #Ad";
+const AMAZON_ASSOCIATE = "<i>As an Amazon Associate I earn from qualifying purchases.</i>";
+function withDisclosure(text, isCaption = false) {
+  if (!text || !/href=/.test(text) || /Publicidade<\/b>|Como Afiliado/.test(text)) return text;
+  let out = AD_HEAD + text;
+  if (/amazon\.es/i.test(text)) out += `\n${AMAZON_ASSOCIATE}`;
+  out += `\n${AD_TAGS}`;
+  if (isCaption && visibleLength(out) > 1024) console.error(`Aviso: legenda com ${visibleLength(out)} caracteres (limite 1024 em fotos) depois da divulgação de publicidade.`);
+  return out;
+}
+function disclosurePayload(method, payload) {
+  if (payload.chat_id !== undefined) return payload; // mensagens privadas/admin não levam publicidade
+  if (method === "sendPhoto" && payload.caption) return { ...payload, caption: withDisclosure(payload.caption, true) };
+  if (method === "sendMessage" && payload.text) return { ...payload, text: withDisclosure(payload.text) };
+  if (method === "sendMediaGroup" && Array.isArray(payload.media) && payload.media[0]?.caption) {
+    const media = payload.media.map((m, i) => i === 0 ? { ...m, caption: withDisclosure(m.caption, true) } : m);
+    return { ...payload, media };
+  }
+  return payload;
+}
+
 async function telegram(method, payload) {
+  payload = disclosurePayload(method, payload);
   if (DRY_RUN) {
     console.log(`\n[DRY_RUN] ${method}:\n${JSON.stringify(payload, null, 2)}\n`);
     return { ok: true };
@@ -172,6 +197,7 @@ async function telegram(method, payload) {
 
 // Envio de uma imagem gerada pelo bot (ficheiro, não URL)
 async function telegramPhotoUpload(buffer, fields) {
+  if (fields && fields.caption) fields = { ...fields, caption: withDisclosure(fields.caption, true) };
   if (DRY_RUN) {
     if (process.env.PREVIEW_IMAGE) fs.writeFileSync(process.env.PREVIEW_IMAGE, buffer);
     console.log(`\n[DRY_RUN] sendPhoto (imagem ${Math.round(buffer.length / 1024)} KB):\n${JSON.stringify(fields, null, 2)}\n`);
