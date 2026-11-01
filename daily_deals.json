@@ -1,7 +1,18 @@
 {
   "date": "2026-11-01",
   "lastSummaryDate": "2026-10-31",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "B098K3H92Z",
+      "store": "Amazon ES",
+      "title": "TP-Link UB500 - Adaptador Bluetooth USB para PC",
+      "currentPrice": "8,12€",
+      "oldPrice": "10,16€",
+      "discountPct": 20,
+      "affUrl": "https://www.amazon.es/dp/B098K3H92Z?tag=radardescon08-21",
+      "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/61bV4aG4GpL._AC_SL1500_.jpg"
+    }
+  ],
   "ottocastDate": "2026-11-01",
   "cheapSlots": [
     12
