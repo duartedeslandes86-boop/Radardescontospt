@@ -3,6 +3,8 @@
   "lastSummaryDate": "2026-11-04",
   "deals": [],
   "ottocastDate": "2026-11-04",
-  "cheapSlots": [],
+  "cheapSlots": [
+    12
+  ],
   "recordAlerts": 0
 }
