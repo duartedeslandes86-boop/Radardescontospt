@@ -55,6 +55,15 @@
     if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank');
   }
 
+  // Só aceita http(s); qualquer outro esquema (javascript:, data:, ...) é descartado.
+  function safeUrl(u) {
+    if (!u) return '#';
+    try {
+      const x = new URL(String(u), location.href);
+      return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : '#';
+    } catch (e) { return '#'; }
+  }
+
   function setActive(btn) {
     document.querySelectorAll('#tabs .tab').forEach(t => t.classList.remove('on'));
     btn.classList.add('on');
@@ -100,8 +109,9 @@
       metas[0].textContent = 'Validade: ' + c.validade + (c.nota ? '. ' + c.nota : '');
       metas[1].textContent = 'Confirmado: ' + c.confirmado;
       const a = card.querySelector('.btn');
-      a.href = c.link;
-      a.addEventListener('click', e => { e.preventDefault(); open(c.link); });
+      const safeCodeLink = safeUrl(c.link);
+      a.href = safeCodeLink;
+      a.addEventListener('click', e => { e.preventDefault(); if (safeCodeLink !== '#') open(safeCodeLink); });
       grid.appendChild(card);
     }
   }
@@ -124,17 +134,19 @@
       card.className = 'card';
       const priceTxt = p.precoVerificado && typeof p.preco === 'number' ? euro(p.preco) : '';
       card.innerHTML = `
-        <img src="${p.imagem}" alt="" loading="lazy">
+        <img alt="" loading="lazy">
         <div class="store"></div>
         <div class="name"></div>
         <div class="price"></div>
         <a class="btn" href="#">Ver oferta</a>`;
+      card.querySelector('img').src = safeUrl(p.imagem);
       card.querySelector('.store').textContent = p.loja || '';
       card.querySelector('.name').textContent = p.nome;
       card.querySelector('.price').textContent = priceTxt;
       const a = card.querySelector('.btn');
-      a.href = p.link;
-      a.addEventListener('click', e => { e.preventDefault(); open(p.link); });
+      const safeLink = safeUrl(p.link);
+      a.href = safeLink;
+      a.addEventListener('click', e => { e.preventDefault(); if (safeLink !== '#') open(safeLink); });
       grid.appendChild(card);
     }
   }

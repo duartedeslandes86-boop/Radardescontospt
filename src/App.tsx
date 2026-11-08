@@ -22,6 +22,23 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
+// Pedidos que alteram estado levam a chave de administração (guardada só nesta sessão do browser).
+async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const send = (key: string) =>
+    fetch(url, { ...init, headers: { ...(init.headers || {}), ...(key ? { 'x-api-key': key } : {}) } });
+  let key = '';
+  try { key = sessionStorage.getItem('adminKey') || ''; } catch { /* sem storage */ }
+  let res = await send(key);
+  if (res.status === 401) {
+    const typed = window.prompt('Chave de administração (ADMIN_API_KEY):') || '';
+    if (typed) {
+      try { sessionStorage.setItem('adminKey', typed); } catch { /* sem storage */ }
+      res = await send(typed);
+    }
+  }
+  return res;
+}
+
 export default function App() {
   const [deals, setDeals] = useState<DealItem[]>([]);
   const [history, setHistory] = useState<SentDealRecord[]>([]);
@@ -139,7 +156,7 @@ export default function App() {
   const handleToggleAutopilot = async () => {
     const nextState = !autopilot?.active;
     try {
-      const res = await fetch('/api/autopilot', {
+      const res = await apiFetch('/api/autopilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: nextState ? 'start' : 'stop' }),
@@ -163,7 +180,7 @@ export default function App() {
   const handleTriggerAutopilotNow = async () => {
     setIsTriggeringAutopilot(true);
     try {
-      const res = await fetch('/api/autopilot', {
+      const res = await apiFetch('/api/autopilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'trigger_now' }),
@@ -186,7 +203,7 @@ export default function App() {
   const handleManualPublish = async (form: QuickPublishFormState): Promise<boolean> => {
     setIsPublishing(true);
     try {
-      const res = await fetch('/api/publish', {
+      const res = await apiFetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -228,7 +245,7 @@ export default function App() {
   const handleOneClickPublish = async (deal: DealItem) => {
     setPublishingDealId(deal.id);
     try {
-      const res = await fetch('/api/publish', {
+      const res = await apiFetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,7 +299,7 @@ export default function App() {
   // Eliminar do histórico
   const handleDeleteHistoryItem = async (id: string) => {
     try {
-      const res = await fetch('/api/history/delete', {
+      const res = await apiFetch('/api/history/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),

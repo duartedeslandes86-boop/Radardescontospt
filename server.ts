@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { timingSafeEqual } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -749,7 +750,31 @@ function stopAutopilot(): void {
 // Inicializar Servidor Express
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '100kb' }));
+
+  // Segurança: pedidos que alteram estado (POST) exigem chave de administração.
+  // Em produção, sem ADMIN_API_KEY definida, são recusados (falha fechada).
+  // Fora de produção sem chave, ficam abertos para desenvolvimento local.
+  const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
+  const keyMatches = (given: string): boolean => {
+    const a = Buffer.from(given);
+    const b = Buffer.from(ADMIN_API_KEY);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    if (!ADMIN_API_KEY) {
+      if (isProduction) {
+        return res.status(503).json({ success: false, error: 'ADMIN_API_KEY não configurada no servidor.' });
+      }
+      return next();
+    }
+    const given = String(req.headers['x-api-key'] || '');
+    if (!given || !keyMatches(given)) {
+      return res.status(401).json({ success: false, error: 'Não autorizado.' });
+    }
+    next();
+  });
 
   // 1. Endpoint: Obter Ofertas do Radar (Apenas Amazon.es com ASIN real e tradução PT)
   app.get('/api/scan', async (_req, res) => {
