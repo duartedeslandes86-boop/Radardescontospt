@@ -1,6 +1,6 @@
 {
   "date": "2026-11-11",
-  "lastSummaryDate": "2026-11-10",
+  "lastSummaryDate": "2026-11-11",
   "deals": [
     {
       "asin": "quatroelementos:carhartt-wip-hooded-stereo-sweat-i03362489xx",
@@ -125,7 +125,8 @@
   ],
   "ottocastDate": "2026-11-11",
   "cheapSlots": [
-    12
+    12,
+    20
   ],
   "recordAlerts": 0
 }
