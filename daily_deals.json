@@ -61,6 +61,26 @@
       "discountPct": 35,
       "affUrl": "https://www.awin1.com/cread.php?awinmid=124836&awinaffid=3124493&ued=https%3A%2F%2F4elementos.com.pt%2Fproducts%2Fadidas-lxcon-94-ee6257",
       "imgUrl": "https://cdn.shopify.com/s/files/1/0981/2797/0634/files/6737.jpg?v=1768032932&width=1200&format=pjpg"
+    },
+    {
+      "asin": "B09BFT7NZJ",
+      "store": "Amazon ES",
+      "title": "Tapo P110 - Tomada inteligente WiFi",
+      "currentPrice": "8,70€",
+      "oldPrice": "11,08€",
+      "discountPct": 22,
+      "affUrl": "https://www.amazon.es/dp/B09BFT7NZJ?tag=radardescon08-21",
+      "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/61927c8rHTL._AC_SL1500_.jpg"
+    },
+    {
+      "asin": "B0D9MDV5L5",
+      "store": "Amazon ES",
+      "title": "Tapo C200C Câmara de vigilância WiFi interior 360º",
+      "currentPrice": "19,30€",
+      "oldPrice": "24,39€",
+      "discountPct": 21,
+      "affUrl": "https://www.amazon.es/dp/B0D9MDV5L5?tag=radardescon08-21",
+      "imgUrl": "https://images-eu.ssl-images-amazon.com/images/I/717yv8iGBvL._AC_SL1500_.jpg"
     }
   ],
   "ottocastDate": "2026-11-13",
