@@ -1,7 +1,18 @@
 {
   "date": "2026-11-14",
   "lastSummaryDate": "2026-11-13",
-  "deals": [],
+  "deals": [
+    {
+      "asin": "tenways:ago-t",
+      "store": "Tenways",
+      "title": "TENWAYS AGO T",
+      "currentPrice": "2.199,00€",
+      "oldPrice": "2.699,00€",
+      "discountPct": 19,
+      "affUrl": "https://www.awin1.com/cread.php?awinmid=72399&awinaffid=3124493&ued=https%3A%2F%2Fwww.tenways.com%2Fproducts%2Fago-t&clickref=tg-tenways",
+      "imgUrl": "https://cdn.shopify.com/s/files/1/0563/3926/7733/files/green_cc228123-abb2-4ae0-81f3-c8bd5166eec2.webp?v=1756713072&width=1200&format=pjpg"
+    }
+  ],
   "ottocastDate": "2026-11-13",
   "cheapSlots": [],
   "recordAlerts": 0
